@@ -17,9 +17,7 @@ jobs:
           - os: macos-latest
             target: darwin-arm64
             lib: libpty-to-json.dylib
-          - os: windows-latest
-            target: win32-x64
-            lib: pty-to-json.dll
+          # Windows excluded: Zig build system path handling bug with Ghostty
       fail-fast: true
 
     runs-on: ${{ matrix.os }}
@@ -68,12 +66,6 @@ jobs:
         with:
           name: lib-darwin-arm64
           path: dist/darwin-arm64
-
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: lib-win32-x64
-          path: dist/win32-x64
 
       - name: List artifacts
         run: find dist -type f

@@ -3,8 +3,7 @@ import path from "path"
 import fs from "fs"
 
 function getLibPath(): string {
-  // Windows uses .dll without 'lib' prefix
-  const libName = process.platform === "win32" ? `pty-to-json.${suffix}` : `libpty-to-json.${suffix}`
+  const libName = `libpty-to-json.${suffix}`
 
   // Check local development path first (zig-out)
   const devPath = path.join(import.meta.dir, "..", "zig-out", "lib", libName)
@@ -13,12 +12,7 @@ function getLibPath(): string {
   }
 
   // Check npm package dist paths
-  const platformMap: Record<string, string> = {
-    darwin: "darwin-arm64",
-    linux: "linux-x64",
-    win32: "win32-x64",
-  }
-  const platform = platformMap[process.platform] || "linux-x64"
+  const platform = process.platform === "darwin" ? "darwin-arm64" : "linux-x64"
   const distPath = path.join(import.meta.dir, "..", "dist", platform, libName)
   if (fs.existsSync(distPath)) {
     return distPath
