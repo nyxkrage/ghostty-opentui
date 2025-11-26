@@ -53,6 +53,10 @@ NEVER use require. just import at the top of the file with esm
 
 use bun add to install packages instead of npm
 
+use bun install to install dependencies
+
+use bun test to run the tui tests
+
 ## React
 
 NEVER pass function or callbacks as dependencies of useEffect, this will very easily cause infinite loops if you forget to use useCallback

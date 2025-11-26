@@ -114,7 +114,7 @@ describe("ls output tests", () => {
 
     // With limit: only first N lines
     const withLimit = ptyToJson(lsOutput, { cols: 80, rows: 50, limit: actualLines })
-    expect(withLimit.lines.length).toBe(actualLines) // Only 5 lines
+    expect(withLimit.lines).toMatchSnapshot()
   })
 
   it("should handle ls output with smaller rows to avoid blank lines", () => {
@@ -127,7 +127,7 @@ describe("ls output tests", () => {
 
     // Using rows close to actual content
     const result = ptyToJson(lsOutput, { cols: 80, rows: actualLines + 2 })
-    expect(result.lines.length).toBeLessThanOrEqual(actualLines + 2)
+    expect(result.lines).toMatchSnapshot()
   })
 
   it("should preserve ANSI colors in ls output", () => {
@@ -135,6 +135,8 @@ describe("ls output tests", () => {
     const result = ptyToJson(lsOutput, { cols: 80, rows: 5 })
 
     const firstLine = result.lines[0]
+    expect(firstLine).toMatchSnapshot()
+    
     const coloredSpan = firstLine.spans.find(s => s.text === ".git")
     expect(coloredSpan).toBeDefined()
     expect(coloredSpan!.fg).toBeTruthy() // Should have blue color

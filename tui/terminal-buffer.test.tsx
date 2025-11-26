@@ -38,6 +38,7 @@ describe("TerminalBufferRenderable", () => {
     await renderOnce()
     const output = captureCharFrame()
     expect(output).toContain("Test Basic")
+    expect(output).toMatchSnapshot()
   })
 
   it("should render simple ANSI text", async () => {
@@ -53,6 +54,7 @@ describe("TerminalBufferRenderable", () => {
     const output = captureCharFrame()
     expect(output).toContain("Hello")
     expect(output).toContain("World")
+    expect(output).toMatchSnapshot()
   })
 
   it("should render colored text", async () => {
@@ -68,6 +70,7 @@ describe("TerminalBufferRenderable", () => {
     expect(output).toContain("Red")
     expect(output).toContain("Green")
     expect(output).toContain("Blue")
+    expect(output).toMatchSnapshot()
   })
 
   it("should render multi-line ANSI", async () => {
@@ -83,6 +86,7 @@ describe("TerminalBufferRenderable", () => {
     expect(output).toContain("Line 1")
     expect(output).toContain("Line 2")
     expect(output).toContain("Line 3")
+    expect(output).toMatchSnapshot()
   })
 
   it("should handle prefix being added", async () => {
@@ -100,6 +104,7 @@ describe("TerminalBufferRenderable", () => {
     const output = captureCharFrame()
     expect(output).toContain("PREFIX")
     expect(output).toContain("Original Text")
+    expect(output).toMatchSnapshot()
   })
 
   it("should handle multiple prefix additions", async () => {
@@ -119,6 +124,7 @@ describe("TerminalBufferRenderable", () => {
     expect(output).toContain("PREFIX 2")
     expect(output).toContain("PREFIX 1")
     expect(output).toContain("Base Text")
+    expect(output).toMatchSnapshot()
   })
 
   it("should respect cols and rows options", async () => {
@@ -131,6 +137,7 @@ describe("TerminalBufferRenderable", () => {
 
     const output = captureCharFrame()
     expect(output).toContain("Test")
+    expect(output).toMatchSnapshot()
   })
 
   it("should handle bold and italic text", async () => {
@@ -145,6 +152,7 @@ describe("TerminalBufferRenderable", () => {
     expect(output).toContain("Bold")
     expect(output).toContain("Italic")
     expect(output).toContain("Both")
+    expect(output).toMatchSnapshot()
   })
 
   it("should handle RGB colors", async () => {
@@ -158,6 +166,7 @@ describe("TerminalBufferRenderable", () => {
     const output = captureCharFrame()
     expect(output).toContain("Hot Pink")
     expect(output).toContain("Spring Green")
+    expect(output).toMatchSnapshot()
   })
 
   it("should handle empty ANSI", async () => {
@@ -169,6 +178,7 @@ describe("TerminalBufferRenderable", () => {
 
     const output = captureCharFrame()
     expect(output).toBeDefined()
+    expect(output).toMatchSnapshot()
   })
 
   it("should preserve newlines correctly", async () => {
@@ -182,6 +192,7 @@ describe("TerminalBufferRenderable", () => {
     const output = captureCharFrame()
     expect(output).toContain("Line1")
     expect(output).toContain("Line3")
+    expect(output).toMatchSnapshot()
   })
 
   it("should handle background colors", async () => {
@@ -195,5 +206,6 @@ describe("TerminalBufferRenderable", () => {
     const output = captureCharFrame()
     expect(output).toContain("Red BG")
     expect(output).toContain("Green BG")
+    expect(output).toMatchSnapshot()
   })
 })
