@@ -6,7 +6,8 @@
     "declarationMap": true,
     "noEmit": false,
     "allowImportingTsExtensions": false,
-    "moduleResolution": "node"
+    "moduleResolution": "node",
+    "types": ["bun-types"]
   },
   "include": ["tui/ffi.ts", "tui/terminal-buffer.ts"],
   "exclude": ["tui/index.tsx", "tui/*.test.tsx", "tui/bench.test.tsx"]
