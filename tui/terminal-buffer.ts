@@ -75,6 +75,7 @@ export class TerminalBufferRenderable extends TextBufferRenderable {
   private _ansi: string | Buffer
   private _cols: number
   private _rows: number
+  private _ansiDirty: boolean = false
 
   constructor(ctx: RenderContext, options: TerminalBufferOptions) {
     super(ctx, {
@@ -86,7 +87,7 @@ export class TerminalBufferRenderable extends TextBufferRenderable {
     this._ansi = options.ansi
     this._cols = options.cols ?? 120
     this._rows = options.rows ?? 40
-    this.updateBuffer()
+    this._ansiDirty = true
   }
 
   get ansi(): string | Buffer {
@@ -96,7 +97,8 @@ export class TerminalBufferRenderable extends TextBufferRenderable {
   set ansi(value: string | Buffer) {
     if (this._ansi !== value) {
       this._ansi = value
-      this.updateBuffer()
+      this._ansiDirty = true
+      this.requestRender()
     }
   }
 
@@ -107,7 +109,8 @@ export class TerminalBufferRenderable extends TextBufferRenderable {
   set cols(value: number) {
     if (this._cols !== value) {
       this._cols = value
-      this.updateBuffer()
+      this._ansiDirty = true
+      this.requestRender()
     }
   }
 
@@ -118,14 +121,19 @@ export class TerminalBufferRenderable extends TextBufferRenderable {
   set rows(value: number) {
     if (this._rows !== value) {
       this._rows = value
-      this.updateBuffer()
+      this._ansiDirty = true
+      this.requestRender()
     }
   }
 
-  private updateBuffer(): void {
-    const data = ptyToJson(this._ansi, { cols: this._cols, rows: this._rows })
-    const styledText = terminalDataToStyledText(data)
-    this.textBuffer.setStyledText(styledText)
-    this.updateTextInfo()
+  protected renderSelf(buffer: any): void {
+    if (this._ansiDirty) {
+      const data = ptyToJson(this._ansi, { cols: this._cols, rows: this._rows })
+      const styledText = terminalDataToStyledText(data)
+      this.textBuffer.setStyledText(styledText)
+      this.updateTextInfo()
+      this._ansiDirty = false
+    }
+    super.renderSelf(buffer)
   }
 }
