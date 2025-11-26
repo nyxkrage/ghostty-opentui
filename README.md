@@ -1,8 +1,8 @@
-# pty-to-html
+# pty-to-json
 
-Convert raw PTY (pseudo-terminal) log files to styled HTML output using [Ghostty's](https://github.com/ghostty-org/ghostty) terminal emulation library.
+Convert raw PTY (pseudo-terminal) log files to JSON using [Ghostty's](https://github.com/ghostty-org/ghostty) terminal emulation library.
 
-This tool parses terminal escape sequences (ANSI colors, styles, cursor movements, etc.) and renders the final terminal state as HTML with proper styling.
+This tool parses terminal escape sequences (ANSI colors, styles, cursor movements, etc.) and outputs a compact JSON representation of the terminal state.
 
 ## Features
 
@@ -10,9 +10,34 @@ This tool parses terminal escape sequences (ANSI colors, styles, cursor movement
 - Supports ANSI colors (16, 256, and true color)
 - Handles cursor movements, scrolling, and line editing
 - Configurable terminal dimensions
-- Output as HTML fragment or full HTML document
+- Pagination support (offset/limit)
+- Compact JSON format with merged spans
 - Reads from file or stdin
 - Fast processing
+
+## JSON Output Format
+
+```json
+{
+  "cols": 120,
+  "rows": 40,
+  "cursor": [x, y],
+  "offset": 0,
+  "totalLines": 40,
+  "lines": [
+    [["text with spaces", "#fg", "#bg", flags, width], ...],
+    ...
+  ]
+}
+```
+
+Each span is: `[text, fg_color, bg_color, flags, width]`
+
+- **text**: UTF-8 string (consecutive cells with same style merged)
+- **fg_color**: Foreground color as `#rrggbb` or `null` for default
+- **bg_color**: Background color as `#rrggbb` or `null` for default
+- **flags**: Bitmask (bold=1, italic=2, underline=4, strikethrough=8, inverse=16, faint=32)
+- **width**: Character width in terminal columns
 
 ## Requirements
 
@@ -36,7 +61,7 @@ Run the automated setup script:
 This will:
 1. Download and install Zig 0.15.2
 2. Clone the Ghostty repository
-3. Build pty-to-html in release mode
+3. Build pty-to-json in release mode
 
 ## Manual Setup
 
@@ -76,14 +101,14 @@ Clone the Ghostty repository adjacent to this project:
 ```bash
 cd ..
 git clone https://github.com/ghostty-org/ghostty.git
-cd pty-to-html
+cd pty-to-json
 ```
 
 Your directory structure should look like:
 ```
 parent-dir/
 ├── ghostty/
-└── pty-to-html/
+└── pty-to-json/
 ```
 
 ### 3. Build
@@ -94,14 +119,14 @@ Build in release mode for optimal performance:
 zig build -Doptimize=ReleaseFast
 ```
 
-The binary will be at `zig-out/bin/pty-to-html`.
+The binary will be at `zig-out/bin/pty-to-json`.
 
 ## Usage
 
 ```
-Usage: pty-to-html [OPTIONS] [FILE]
+Usage: pty-to-json [OPTIONS] [FILE]
 
-Convert a raw PTY log file to HTML with styled terminal output.
+Convert a raw PTY log file to JSON with terminal state.
 
 If FILE is not provided, reads from stdin.
 
@@ -109,49 +134,57 @@ Options:
   -c, --cols N         Terminal width in columns (default: 120)
   -r, --rows N         Terminal height in rows (default: 40)
   -o, --output FILE    Write output to FILE instead of stdout
-  --full               Output a full HTML document (with <html>, <head>, etc.)
-  --unwrap             Unwrap soft-wrapped lines
-  --no-trim            Don't trim trailing whitespace
-  --bg COLOR           Background color (hex, e.g., #1e1e1e)
-  --fg COLOR           Foreground color (hex, e.g., #d4d4d4)
-  --inline-colors      Emit colors as RGB instead of CSS variables
-  --no-palette         Don't emit CSS palette variables
+  --offset N           Start output from line N (0-based, for pagination)
+  --limit N            Output at most N lines (for pagination)
   -h, --help           Show this help message
 ```
 
 ### Examples
 
-Basic conversion (outputs HTML fragment to stdout):
+Basic conversion (outputs JSON to stdout):
 ```bash
-./zig-out/bin/pty-to-html session.log
+./zig-out/bin/pty-to-json session.log
 ```
 
 Specify terminal dimensions:
 ```bash
-./zig-out/bin/pty-to-html -c 80 -r 24 session.log
+./zig-out/bin/pty-to-json -c 80 -r 24 session.log
 ```
 
-Generate a full HTML document:
+Paginate output (lines 10-19):
 ```bash
-./zig-out/bin/pty-to-html --full -o output.html session.log
+./zig-out/bin/pty-to-json --offset 10 --limit 10 session.log
 ```
 
 Read from stdin:
 ```bash
-cat session.log | ./zig-out/bin/pty-to-html --full > output.html
+cat session.log | ./zig-out/bin/pty-to-json > output.json
 ```
 
-Process with custom dimensions and save to file:
+Save to file:
 ```bash
-./zig-out/bin/pty-to-html -c 132 -r 50 --full -o wide.html session.log
+./zig-out/bin/pty-to-json -o output.json session.log
 ```
+
+## HTML Viewer
+
+An HTML/JS viewer is included to render the JSON output:
+
+```bash
+# Start dev server (requires Node.js)
+npm run dev
+
+# Open http://localhost:5174 in browser
+```
+
+The viewer loads JSON and renders it as a styled terminal display.
 
 ## How It Works
 
 1. **Terminal Emulation**: Creates a virtual terminal with specified dimensions using Ghostty's `ghostty-vt` library
 2. **VT Stream Processing**: Parses the raw PTY data through the terminal's VT stream, interpreting all escape sequences
 3. **State Capture**: After processing, the terminal contains the final rendered state
-4. **HTML Generation**: Uses Ghostty's `TerminalFormatter` to convert the terminal state to styled HTML with proper color support
+4. **JSON Generation**: Walks the terminal grid, merging consecutive cells with the same style into spans
 
 ## Recording PTY Sessions
 
@@ -202,17 +235,19 @@ zig version  # Must be 0.15.2
 ## Project Structure
 
 ```
-pty-to-html/
+pty-to-json/
 ├── AGENTS.md        # Instructions for agents working with this codebase
 ├── build.zig        # Zig build configuration
 ├── build.zig.zon    # Package manifest (references ghostty)
+├── index.html       # HTML/JS viewer
 ├── LICENSE          # License
-└── README.md        # This file
+├── README.md        # This file
 ├── setup.sh         # Automated setup script
-├── src
+├── src/
 │   └── main.zig     # Main application
-└── testdata         # Test input data
-    └── session.log
+└── testdata/        # Test input data
+    ├── session.log  # Sample PTY log
+    └── session.json # Sample JSON output
 ```
 
 ## License
