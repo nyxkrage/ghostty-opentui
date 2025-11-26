@@ -69,12 +69,14 @@ export interface TerminalBufferOptions extends TextBufferOptions {
   ansi: string | Buffer
   cols?: number
   rows?: number
+  limit?: number  // Maximum number of lines to render (from start)
 }
 
 export class TerminalBufferRenderable extends TextBufferRenderable {
   private _ansi: string | Buffer
   private _cols: number
   private _rows: number
+  private _limit?: number
   private _ansiDirty: boolean = false
   private _lineCount: number = 0
 
@@ -88,14 +90,27 @@ export class TerminalBufferRenderable extends TextBufferRenderable {
     this._ansi = options.ansi
     this._cols = options.cols ?? 120
     this._rows = options.rows ?? 40
+    this._limit = options.limit
     this._ansiDirty = true
   }
 
   /**
-   * Returns the total number of lines in the terminal buffer
+   * Returns the total number of lines in the terminal buffer (after limit and trimming)
    */
   get lineCount(): number {
     return this._lineCount
+  }
+
+  get limit(): number | undefined {
+    return this._limit
+  }
+
+  set limit(value: number | undefined) {
+    if (this._limit !== value) {
+      this._limit = value
+      this._ansiDirty = true
+      this.requestRender()
+    }
   }
 
   get ansi(): string | Buffer {
@@ -136,11 +151,20 @@ export class TerminalBufferRenderable extends TextBufferRenderable {
 
   protected renderSelf(buffer: any): void {
     if (this._ansiDirty) {
-      const data = ptyToJson(this._ansi, { cols: this._cols, rows: this._rows })
-      this._lineCount = data.lines.length
+      // Pass limit to ptyToJson - it limits at Zig level before JSON serialization (more efficient!)
+      const data = ptyToJson(this._ansi, { 
+        cols: this._cols, 
+        rows: this._rows,
+        limit: this._limit 
+      })
       const styledText = terminalDataToStyledText(data)
       this.textBuffer.setStyledText(styledText)
       this.updateTextInfo()
+      
+      // Update line count based on actual rendered lines
+      const lineInfo = this.textBufferView.logicalLineInfo
+      this._lineCount = lineInfo.lineStarts.length
+      
       this._ansiDirty = false
     }
     super.renderSelf(buffer)
