@@ -69,7 +69,7 @@ const libPath = getLibPath()
 
 const lib = dlopen(libPath, {
   ptyToJson: {
-    args: [FFIType.ptr, FFIType.usize, FFIType.u16, FFIType.u16, FFIType.usize, FFIType.usize, FFIType.ptr],
+    args: [FFIType.ptr, FFIType.u64, FFIType.u16, FFIType.u16, FFIType.u64, FFIType.u64, FFIType.ptr],
     returns: FFIType.ptr,
   },
   freeArena: {
@@ -110,12 +110,13 @@ export function ptyToJson(input: Buffer | Uint8Array | string, options: PtyToJso
   const { cols = 120, rows = 40, offset = 0, limit = 0 } = options
 
   const inputBuffer = typeof input === "string" ? Buffer.from(input) : input
-  const inputPtr = ptr(inputBuffer)
+  const inputArray = inputBuffer instanceof Buffer ? new Uint8Array(inputBuffer) : inputBuffer
+  const inputPtr = ptr(inputArray)
 
   const outLenBuffer = new BigUint64Array(1)
   const outLenPtr = ptr(outLenBuffer)
 
-  const resultPtr = lib.symbols.ptyToJson(inputPtr, inputBuffer.length, cols, rows, offset, limit, outLenPtr)
+  const resultPtr = lib.symbols.ptyToJson(inputPtr, inputArray.length, cols, rows, offset, limit, outLenPtr)
 
   if (!resultPtr) {
     throw new Error("ptyToJson returned null")
