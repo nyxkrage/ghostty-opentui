@@ -2,10 +2,22 @@ import { dlopen, FFIType, ptr, read, suffix, toArrayBuffer } from "bun:ffi"
 import path from "path"
 import fs from "fs"
 
+// Embed native libraries for bun compile (type: "file" embeds them in the binary)
+// @ts-ignore - import attribute for embedding binary files
+import embeddedDylib from "../dist/darwin-arm64/libpty-to-json.dylib" with { type: "file" }
+// @ts-ignore - import attribute for embedding binary files
+import embeddedSo from "../dist/linux-x64/libpty-to-json.so" with { type: "file" }
+
 function getLibPath(): string {
   const libName = `libpty-to-json.${suffix}`
 
-  // Check local development path first (zig-out)
+  // Check embedded libraries first (for bun compile)
+  const embedded = process.platform === "darwin" ? embeddedDylib : embeddedSo
+  if (embedded && fs.existsSync(embedded)) {
+    return embedded
+  }
+
+  // Check local development path (zig-out)
   const devPath = path.join(import.meta.dir, "..", "zig-out", "lib", libName)
   if (fs.existsSync(devPath)) {
     return devPath
