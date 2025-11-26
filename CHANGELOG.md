@@ -1,0 +1,15 @@
+# Changelog
+
+## 1.2.1
+
+### Bug Fixes
+
+- **zig**: Enable linefeed mode to fix newline column reset
+  - Lines containing ANSI escape sequences followed by `\n` were wrapping incorrectly
+  - Example: `import { readFileSync } from 'fs';` would split as `import { readFileSync } from 'f` + `s';`
+  - Root cause: LF (0x0A) only moves cursor down without resetting column in standard VT100 behavior
+  - Fix: Enable ghostty's linefeed mode so LF also performs carriage return (column reset)
+
+### Dev Dependencies
+
+- Added `@types/react` for TypeScript type checking
