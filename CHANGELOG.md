@@ -11,6 +11,7 @@
   - `terminalDataToStyledText` now accepts optional `highlights` parameter
   - `TerminalBufferRenderable` now accepts `highlights` option in constructor and as a property
 - **tui demo**: Added `findWordHighlights` helper and demo highlighting for ERROR/WARN/SUCCESS words
+- **ffi**: Added Windows fallback using `strip-ansi` - returns plain text without colors/styles
 
 ## 1.2.2
 

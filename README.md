@@ -405,21 +405,21 @@ Options:
 
 | Platform | Status |
 |----------|--------|
-| Linux x64 | Supported |
-| Linux ARM64 | Supported |
-| macOS ARM64 (Apple Silicon) | Supported |
-| macOS x64 (Intel) | Supported |
-| Windows | Not supported |
+| Linux x64 | Full support |
+| Linux ARM64 | Full support |
+| macOS ARM64 (Apple Silicon) | Full support |
+| macOS x64 (Intel) | Full support |
+| Windows | Fallback mode (plain text only) |
 
-### Why no Windows?
+### Windows Fallback
 
-Windows builds fail due to a **Zig build system bug** with path handling when compiling Ghostty. The error occurs in `std.Build.Step.Run.zig`:
+Windows cannot use the native Zig library due to a **Zig build system bug** with path handling when compiling Ghostty. Instead, Windows uses a fallback that:
 
-```
-assert(!std.fs.path.isAbsolute(child_cwd_rel))
-```
+- Strips ANSI escape codes using `strip-ansi`
+- Returns plain text without colors or styles
+- Supports all the same API (cols, rows, limit, offset)
 
-This is an upstream issue with Zig/Ghostty, not something fixable in this project. Ghostty itself doesn't officially support Windows yet. Windows users can use **WSL** (Windows Subsystem for Linux) as a workaround.
+This means Windows users get functional output, just without syntax highlighting. For full color support on Windows, use **WSL** (Windows Subsystem for Linux).
 
 ## Requirements
 

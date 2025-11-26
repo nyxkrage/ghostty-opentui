@@ -1,7 +1,10 @@
-import { dlopen, FFIType, ptr, read, suffix, toArrayBuffer } from "bun:ffi"
+import { dlopen, FFIType, ptr, suffix, toArrayBuffer } from "bun:ffi"
 import path from "path"
 import fs from "fs"
 import os from "os"
+import stripAnsi from "strip-ansi"
+
+const IS_WINDOWS = process.platform === "win32"
 
 // Embed native libraries for bun compile (type: "file" embeds them in the binary)
 // @ts-ignore - import attribute for embedding binary files
@@ -65,18 +68,19 @@ function getLibPath(): string {
   )
 }
 
-const libPath = getLibPath()
-
-const lib = dlopen(libPath, {
-  ptyToJson: {
-    args: [FFIType.ptr, FFIType.u64, FFIType.u16, FFIType.u16, FFIType.u64, FFIType.u64, FFIType.ptr],
-    returns: FFIType.ptr,
-  },
-  freeArena: {
-    args: [],
-    returns: FFIType.void,
-  },
-})
+// Only load native library on non-Windows platforms
+const lib = IS_WINDOWS
+  ? null
+  : dlopen(getLibPath(), {
+      ptyToJson: {
+        args: [FFIType.ptr, FFIType.u64, FFIType.u16, FFIType.u16, FFIType.u64, FFIType.u64, FFIType.ptr],
+        returns: FFIType.ptr,
+      },
+      freeArena: {
+        args: [],
+        returns: FFIType.void,
+      },
+    })
 
 export interface TerminalSpan {
   text: string
@@ -106,7 +110,39 @@ export interface PtyToJsonOptions {
   limit?: number
 }
 
+/**
+ * Windows fallback: strips ANSI codes and returns plain text lines
+ */
+function ptyToJsonFallback(input: Buffer | Uint8Array | string, options: PtyToJsonOptions = {}): TerminalData {
+  const { cols = 120, rows = 40, offset = 0, limit = 0 } = options
+
+  const text = typeof input === "string" ? input : input.toString("utf-8")
+  const plainText = stripAnsi(text)
+  const allLines = plainText.split("\n")
+  
+  // Apply offset and limit
+  const startLine = offset
+  const endLine = limit > 0 ? Math.min(startLine + limit, allLines.length) : allLines.length
+  const selectedLines = allLines.slice(startLine, endLine)
+
+  return {
+    cols,
+    rows,
+    cursor: [0, selectedLines.length],
+    offset,
+    totalLines: allLines.length,
+    lines: selectedLines.map((lineText) => ({
+      spans: [{ text: lineText, fg: null, bg: null, flags: 0, width: lineText.length }],
+    })),
+  }
+}
+
 export function ptyToJson(input: Buffer | Uint8Array | string, options: PtyToJsonOptions = {}): TerminalData {
+  // Windows fallback: strip ANSI and return plain text
+  if (IS_WINDOWS || !lib) {
+    return ptyToJsonFallback(input, options)
+  }
+
   const { cols = 120, rows = 40, offset = 0, limit = 0 } = options
 
   const inputBuffer = typeof input === "string" ? Buffer.from(input) : input
