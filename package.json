@@ -3,26 +3,26 @@
   "version": "1.1.0",
   "description": "Convert raw PTY log files to JSON using Ghostty's terminal emulation library",
   "type": "module",
-  "main": "./tui/ffi.ts",
+  "main": "./dist/ffi.js",
+  "types": "./dist/ffi.d.ts",
   "exports": {
     ".": {
-      "import": "./tui/ffi.ts",
-      "types": "./tui/ffi.ts"
+      "import": "./dist/ffi.js",
+      "types": "./dist/ffi.d.ts"
     },
     "./terminal-buffer": {
-      "import": "./tui/terminal-buffer.ts",
-      "types": "./tui/terminal-buffer.ts"
+      "import": "./dist/terminal-buffer.js",
+      "types": "./dist/terminal-buffer.d.ts"
     }
   },
   "files": [
-    "tui/ffi.ts",
-    "tui/terminal-buffer.ts",
-    "dist/**/*"
+    "dist/**/*",
+    "zig-out/bin/pty-to-json"
   ],
   "scripts": {
     "dev": "bun --watch run tui/index.tsx",
-    "build": "vite build",
-    "preview": "vite preview",
+    "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "bun run build",
     "test": "bun test"
   },
   "keywords": ["terminal", "pty", "vt100", "ansi", "ghostty", "opentui"],
@@ -33,18 +33,14 @@
     "url": "https://github.com/remorses/opentui-ansi-vt"
   },
   "peerDependencies": {
-    "@opentui/core": "*",
-    "@opentui/react": "*"
+    "@opentui/core": "*"
   },
   "peerDependenciesMeta": {
     "@opentui/core": {
       "optional": true
-    },
-    "@opentui/react": {
-      "optional": true
     }
   },
   "devDependencies": {
-    "vite": "^7.2.4"
+    "typescript": "^5.9.3"
   }
 }

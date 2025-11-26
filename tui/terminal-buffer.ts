@@ -6,7 +6,6 @@ import {
   type RenderContext,
   type TextChunk,
 } from "@opentui/core"
-import { extend } from "@opentui/react"
 import { type TerminalData, type TerminalSpan, StyleFlags } from "./ffi"
 
 const DEFAULT_FG = RGBA.fromHex("#d4d4d4")
@@ -101,14 +100,3 @@ export class TerminalBufferRenderable extends TextBufferRenderable {
     this.updateTextInfo()
   }
 }
-
-// Register with React
-declare module "@opentui/react" {
-  interface OpenTUIComponents {
-    "terminal-buffer": typeof TerminalBufferRenderable
-  }
-}
-
-extend({ "terminal-buffer": TerminalBufferRenderable })
-
-// Export to prevent tree-shaking of side-effect registration

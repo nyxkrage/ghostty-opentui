@@ -16,6 +16,13 @@ Fast ANSI/VT terminal parser powered by [Ghostty's](https://github.com/ghostty-o
 bun add opentui-ansi-vt
 ```
 
+For TUI rendering, you'll also need:
+```bash
+bun add @opentui/core @opentui/react  # For React
+# or
+bun add @opentui/core @opentui/solid  # For Solid.js
+```
+
 ## Usage
 
 ### Basic FFI Usage
@@ -36,29 +43,12 @@ console.log(data.cursor) // [col, row] cursor position
 ### With OpenTUI React
 
 ```tsx
-import { ptyToJson } from "opentui-ansi-vt"
-import "opentui-ansi-vt/terminal-buffer" // Register the <terminal-buffer> component
-
-// Parse your ANSI data
-const data = ptyToJson(ansiContent, { cols: 120, rows: 40 })
-
-// Render in OpenTUI
-function TerminalViewer() {
-  return (
-    <scrollbox focused style={{ flexGrow: 1 }}>
-      <terminal-buffer data={data} />
-    </scrollbox>
-  )
-}
-```
-
-### Full Example
-
-```tsx
 import { createCliRenderer } from "@opentui/core"
-import { createRoot, useKeyboard } from "@opentui/react"
-import { ptyToJson } from "opentui-ansi-vt"
-import "opentui-ansi-vt/terminal-buffer"
+import { createRoot, useKeyboard, extend } from "@opentui/react"
+import { ptyToJson, TerminalBufferRenderable } from "opentui-ansi-vt"
+
+// Register the terminal-buffer component
+extend({ "terminal-buffer": TerminalBufferRenderable })
 
 const ANSI = `\x1b[1;32muser@host\x1b[0m:\x1b[1;34m~/app\x1b[0m$ ls
 \x1b[1;34msrc\x1b[0m  package.json  \x1b[1;32mbuild.sh\x1b[0m
@@ -83,22 +73,91 @@ const renderer = await createCliRenderer({ exitOnCtrlC: true })
 createRoot(renderer).render(<App />)
 ```
 
-### Terminal Buffer Component
-
-The `<terminal-buffer>` component renders parsed terminal data with full styling support:
+### With OpenTUI Solid.js
 
 ```tsx
-import "opentui-ansi-vt/terminal-buffer"
+import { createCliRenderer } from "@opentui/core"
+import { createRoot, useKeyboard, extend } from "@opentui/solid"
+import { ptyToJson, TerminalBufferRenderable } from "opentui-ansi-vt"
 
-<terminal-buffer
-  data={terminalData}  // TerminalData from ptyToJson()
-/>
+// Register the terminal-buffer component
+extend({ "terminal-buffer": TerminalBufferRenderable })
+
+const ANSI = `\x1b[1;32muser@host\x1b[0m:\x1b[1;34m~/app\x1b[0m$ ls
+\x1b[1;34msrc\x1b[0m  package.json  \x1b[1;32mbuild.sh\x1b[0m
+\x1b[31mRed\x1b[0m \x1b[32mGreen\x1b[0m \x1b[33mYellow\x1b[0m \x1b[34mBlue\x1b[0m
+`
+
+function App() {
+  useKeyboard((key) => {
+    if (key.name === "q") process.exit(0)
+  })
+
+  const data = ptyToJson(ANSI, { cols: 80, rows: 24 })
+
+  return (
+    <scrollbox focused style={{ "flex-grow": 1 }}>
+      <terminal-buffer data={data} />
+    </scrollbox>
+  )
+}
+
+const renderer = await createCliRenderer({ exitOnCtrlC: true })
+createRoot(renderer).render(<App />)
+```
+
+### Terminal Buffer Component
+
+The `<terminal-buffer>` component renders parsed terminal data with full styling support. 
+
+**Important**: You must call `extend()` to register the component before using it in JSX:
+
+```tsx
+import { extend } from "@opentui/react" // or "@opentui/solid"
+import { TerminalBufferRenderable } from "opentui-ansi-vt/terminal-buffer"
+
+// Register the component
+extend({ "terminal-buffer": TerminalBufferRenderable })
+
+// Now you can use it
+<terminal-buffer data={terminalData} />
+```
+
+### API
+
+#### Main Export
+
+```typescript
+import { ptyToJson, type TerminalData } from "opentui-ansi-vt"
+
+// Parse ANSI data
+const data = ptyToJson(input, options)
+```
+
+#### Terminal Buffer Component
+
+```typescript
+import { TerminalBufferRenderable } from "opentui-ansi-vt/terminal-buffer"
+import { extend } from "@opentui/react" // or "@opentui/solid"
+
+// Register component
+extend({ "terminal-buffer": TerminalBufferRenderable })
 ```
 
 ### TypeScript Types
 
 ```typescript
-import type { TerminalData, TerminalLine, TerminalSpan, PtyToJsonOptions } from "opentui-ansi-vt"
+import type { 
+  TerminalData, 
+  TerminalLine, 
+  TerminalSpan, 
+  PtyToJsonOptions 
+} from "opentui-ansi-vt"
+
+import type { 
+  TerminalBufferRenderable,
+  TerminalBufferOptions
+} from "opentui-ansi-vt/terminal-buffer"
 
 interface TerminalData {
   cols: number
