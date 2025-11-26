@@ -182,11 +182,30 @@ Options:
   --limit N         Max lines to output
 ```
 
+## Platform Support
+
+| Platform | Status |
+|----------|--------|
+| Linux (x64) | Supported |
+| macOS (ARM64) | Supported |
+| Windows | Not supported |
+
+### Why no Windows?
+
+Windows builds fail due to a **Zig build system bug** with path handling when compiling Ghostty. The error occurs in `std.Build.Step.Run.zig`:
+
+```
+assert(!std.fs.path.isAbsolute(child_cwd_rel))
+```
+
+This is an upstream issue with Zig/Ghostty, not something fixable in this project. Ghostty itself doesn't officially support Windows yet. Windows users can use **WSL** (Windows Subsystem for Linux) as a workaround.
+
 ## Requirements
 
 - **Zig 0.15.2** - Required by Ghostty
 - **Bun** - For TUI viewer and FFI
 - **Ghostty** - Cloned adjacent to this repo (setup.sh handles this)
+- **Linux or macOS** - Windows not supported (see above)
 
 ## Development
 
