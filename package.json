@@ -1,5 +1,5 @@
 {
-  "name": "pty-to-json",
+  "name": "opentui-ansi-vt",
   "version": "1.0.0",
   "description": "Convert raw PTY log files to JSON using Ghostty's terminal emulation library",
   "type": "module",

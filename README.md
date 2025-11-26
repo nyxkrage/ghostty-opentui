@@ -13,7 +13,7 @@ Fast ANSI/VT terminal parser powered by [Ghostty's](https://github.com/ghostty-o
 ## Installation
 
 ```bash
-bun add pty-to-json
+bun add opentui-ansi-vt
 ```
 
 ## Usage
@@ -21,7 +21,7 @@ bun add pty-to-json
 ### Basic FFI Usage
 
 ```typescript
-import { ptyToJson, type TerminalData } from "pty-to-json"
+import { ptyToJson, type TerminalData } from "opentui-ansi-vt"
 
 // Parse ANSI string or buffer
 const data: TerminalData = ptyToJson("\x1b[32mHello\x1b[0m World", {
@@ -36,8 +36,8 @@ console.log(data.cursor) // [col, row] cursor position
 ### With OpenTUI React
 
 ```tsx
-import { ptyToJson } from "pty-to-json"
-import "pty-to-json/terminal-buffer" // Register the <terminal-buffer> component
+import { ptyToJson } from "opentui-ansi-vt"
+import "opentui-ansi-vt/terminal-buffer" // Register the <terminal-buffer> component
 
 // Parse your ANSI data
 const data = ptyToJson(ansiContent, { cols: 120, rows: 40 })
@@ -57,7 +57,7 @@ function TerminalViewer() {
 The `<terminal-buffer>` component renders parsed terminal data with full styling support:
 
 ```tsx
-import "pty-to-json/terminal-buffer"
+import "opentui-ansi-vt/terminal-buffer"
 
 <terminal-buffer
   data={terminalData}  // TerminalData from ptyToJson()
@@ -67,7 +67,7 @@ import "pty-to-json/terminal-buffer"
 ### TypeScript Types
 
 ```typescript
-import type { TerminalData, TerminalLine, TerminalSpan, PtyToJsonOptions } from "pty-to-json"
+import type { TerminalData, TerminalLine, TerminalSpan, PtyToJsonOptions } from "opentui-ansi-vt"
 
 interface TerminalData {
   cols: number
