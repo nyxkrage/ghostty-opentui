@@ -325,7 +325,7 @@ interface TerminalSpan {
 
 interface PtyToTextOptions {
   cols?: number               // Terminal width for wrapping (default: 500)
-  rows?: number               // Terminal height (default: 10000, higher = fewer pages = faster)
+  rows?: number               // Terminal height (default: 256)
 }
 
 interface TerminalBufferOptions {
