@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.10
+
+### Bug Fixes
+
+- **dist**: Fix darwin-arm64 binary missing `ptyToText` and `ptyToHtml` symbols
+
 ## 1.2.9
 
 ### Tests
