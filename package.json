@@ -20,7 +20,7 @@
   ],
   "scripts": {
     "dev": "bun --watch run tui/example.tsx",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc",
     "prepublishOnly": "bun run build",
     "test": "bun test"
   },
@@ -41,6 +41,7 @@
   },
   "devDependencies": {
     "@opentui/core": "^0.1.50",
+    "bun-pty": "^0.4.2",
     "@opentui/react": "0.1.50",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
@@ -48,7 +49,6 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "bun-pty": "^0.4.2",
     "strip-ansi": "^7.1.2"
   }
 }

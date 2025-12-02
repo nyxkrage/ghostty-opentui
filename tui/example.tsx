@@ -1,8 +1,8 @@
 import { createCliRenderer, type ScrollBoxRenderable } from "@opentui/core"
 import { createRoot, useKeyboard, extend } from "@opentui/react"
 import { useState, useRef, useMemo } from "react"
-import { GhosttyTerminalRenderable, type HighlightRegion } from "./terminal-buffer"
-import { ptyToJson } from "./ffi"
+import { GhosttyTerminalRenderable, type HighlightRegion } from "../src/terminal-buffer"
+import { ptyToJson } from "../src/ffi"
 
 // Register the ghostty-terminal component
 extend({ "ghostty-terminal": GhosttyTerminalRenderable })

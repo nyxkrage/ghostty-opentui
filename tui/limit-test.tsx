@@ -1,6 +1,6 @@
 import { createCliRenderer } from "@opentui/core"
 import { createRoot, useKeyboard, extend } from "@opentui/react"
-import { GhosttyTerminalRenderable } from "./terminal-buffer"
+import { GhosttyTerminalRenderable } from "../src/terminal-buffer"
 
 // Register the ghostty-terminal component
 extend({ "ghostty-terminal": GhosttyTerminalRenderable })

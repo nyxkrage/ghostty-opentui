@@ -2,7 +2,7 @@ import { createCliRenderer } from "@opentui/core"
 import { createRoot, useKeyboard, useTerminalDimensions, useOnResize, extend } from "@opentui/react"
 import { useState, useRef } from "react"
 import { spawn, type IPty } from "bun-pty"
-import { GhosttyTerminalRenderable } from "./terminal-buffer"
+import { GhosttyTerminalRenderable } from "../src/terminal-buffer"
 
 // Register the ghostty-terminal component
 extend({ "ghostty-terminal": GhosttyTerminalRenderable })
