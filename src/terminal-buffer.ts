@@ -6,7 +6,7 @@ import {
   type RenderContext,
   type TextChunk,
 } from "@opentui/core"
-import { ptyToJson, PersistentTerminal, hasPersistentTerminalSupport, type TerminalData, type TerminalSpan, StyleFlags } from "./ffi"
+import { ptyToJson, PersistentTerminal, hasPersistentTerminalSupport, type TerminalData, type TerminalSpan, StyleFlags } from "./ffi.js"
 
 const DEFAULT_FG = RGBA.fromHex("#d4d4d4")
 

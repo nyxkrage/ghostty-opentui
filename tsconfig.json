@@ -2,11 +2,12 @@
   "compilerOptions": {
     "lib": ["ESNext", "DOM"],
     "target": "ESNext",
-    "module": "CommonJS",
-    "moduleResolution": "node",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
     "jsx": "react-jsx",
     "jsxImportSource": "@opentui/react",
     "strict": true,
+    "allowJs": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
@@ -14,7 +15,7 @@
     "outDir": "./dist",
     "declaration": true,
     "declarationMap": true,
-    "types": ["bun-types"]
+    "types": ["bun-types", "node"]
   },
   "include": ["src/**/*"],
   "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]

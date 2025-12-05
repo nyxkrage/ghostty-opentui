@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.6
+
+### Features
+
+- **ESM support**: Package now uses `"type": "module"` for native ESM output
+  - All `.ts` files compile to ESM (`.js`)
+  - Native module loader kept as CommonJS (`native-lib.cjs`) for `require()` compatibility with `.node` files
+  - Added `bun` export condition to run directly from TypeScript source
+
+### Changes
+
+- Updated tsconfig to use `module: "ESNext"` and `moduleResolution: "Bundler"`
+- Removed top-level `main` and `types` fields in favor of `exports` map
+
 ## 1.3.1
 
 ### Bug Fixes

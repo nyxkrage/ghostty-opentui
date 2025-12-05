@@ -1,54 +1,7 @@
-import { platform, arch } from "os"
 import stripAnsi from "strip-ansi"
+import { native, type NativeModule } from "./native-lib.cjs"
 
-interface NativeModule {
-  // Stateless functions (create terminal each call)
-  ptyToJson(input: string, cols: number, rows: number, offset: number, limit: number): string
-  ptyToText(input: string, cols: number, rows: number): string
-  ptyToHtml(input: string, cols: number, rows: number): string
-
-  // Persistent terminal management functions
-  createTerminal(id: number, cols: number, rows: number): void
-  destroyTerminal(id: number): void
-  feedTerminal(id: number, data: string): void
-  resizeTerminal(id: number, cols: number, rows: number): void
-  resetTerminal(id: number): void
-  getTerminalJson(id: number, offset: number, limit: number): string
-  getTerminalText(id: number): string
-  getTerminalCursor(id: number): string
-}
-
-function loadNativeModule(): NativeModule | null {
-  // Try development path first
-  try {
-    return require("../zig-out/lib/ghostty-opentui.node")
-  } catch {}
-
-  // Load platform-specific dist path (hardcoded for static analysis)
-  const p = platform()
-  const a = arch()
-
-  if (p === "darwin" && a === "arm64") {
-    return require("../dist/darwin-arm64/ghostty-opentui.node")
-  }
-  if (p === "darwin") {
-    return require("../dist/darwin-x64/ghostty-opentui.node")
-  }
-  if (p === "linux" && a === "arm64") {
-    return require("../dist/linux-arm64/ghostty-opentui.node")
-  }
-  if (p === "linux") {
-    return require("../dist/linux-x64/ghostty-opentui.node")
-  }
-  if (p === "win32") {
-    // Windows fallback - no native module
-    return null
-  }
-
-  throw new Error(`Unsupported platform: ${p}-${a}`)
-}
-
-const native: NativeModule | null = loadNativeModule()
+export type { NativeModule }
 
 export interface TerminalSpan {
   text: string

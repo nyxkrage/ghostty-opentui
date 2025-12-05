@@ -1,6 +1,7 @@
 {
   "name": "ghostty-opentui",
-  "version": "1.3.5",
+  "version": "1.3.6",
+  "type": "module",
   "description": "Fast ANSI/VT terminal parser powered by Ghostty's Zig terminal emulation library",
   "exports": {
     ".": {
@@ -28,7 +29,7 @@
   ],
   "scripts": {
     "dev": "bun --watch run tui/example.tsx",
-    "build": "tsc",
+    "build": "tsc && cp src/native-lib.cjs src/native-lib.d.cts dist/",
     "prepublishOnly": "bun run build",
     "test": "bun test"
   },
