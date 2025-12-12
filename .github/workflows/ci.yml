@@ -20,7 +20,7 @@ jobs:
             target: linux-x64
           - os: macos-latest
             target: darwin-arm64
-          - os: macos-13
+          - os: macos-15
             target: darwin-x64
       fail-fast: true
 
