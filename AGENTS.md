@@ -2,6 +2,8 @@
 
 This repository uses Zig 0.15.2 and Ghostty's `ghostty-vt` library.
 
+IMPORTANT! this package should be released only via CI! never locally!
+
 ## Architecture
 
 ```
