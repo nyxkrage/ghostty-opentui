@@ -22,8 +22,16 @@ function loadNativeModule() {
   if (p === "linux" && a === "x64") {
     return require("../dist/linux-x64/ghostty-opentui.node")
   }
+  if (p === "win32" && a === "x64") {
+    try {
+      return require("../dist/win32-x64/ghostty-opentui.node")
+    } catch {
+      // Fallback to strip-ansi if native module fails
+      return null
+    }
+  }
 
-  // Windows - ghostty-vt doesn't support Windows, use strip-ansi fallback
+  // Windows non-x64 fallback
   if (p === "win32") {
     return null
   }

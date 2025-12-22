@@ -12,6 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Build macOS and cross-compile Linux from macOS
   build:
     runs-on: macos-latest
 
@@ -34,13 +35,13 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Build all targets
+      - name: Build macOS and Linux targets
         uses: nick-fields/retry@v3
         with:
           timeout_minutes: 15
           max_attempts: 3
           retry_on: error
-          command: bun scripts/build.ts
+          command: bun scripts/build.ts darwin-arm64 darwin-x64 linux-x64 linux-arm64
 
       - name: Run tests
         run: bun test
@@ -50,6 +51,46 @@ jobs:
         with:
           name: dist
           path: dist/
+
+  # Build Windows natively (cross-compile from macOS fails)
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build Windows
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 15
+          max_attempts: 3
+          retry_on: error
+          command: bun scripts/build.ts win32-x64
+
+      - name: Run tests
+        run: bun test
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-windows
+          path: dist/win32-x64/
 
   test-linux:
     needs: [build]
