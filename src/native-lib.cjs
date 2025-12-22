@@ -13,17 +13,21 @@ function loadNativeModule() {
   if (p === "darwin" && a === "arm64") {
     return require("../dist/darwin-arm64/ghostty-opentui.node")
   }
-  if (p === "darwin") {
+  if (p === "darwin" && a === "x64") {
     return require("../dist/darwin-x64/ghostty-opentui.node")
   }
   if (p === "linux" && a === "arm64") {
     return require("../dist/linux-arm64/ghostty-opentui.node")
   }
-  if (p === "linux") {
+  if (p === "linux" && a === "x64") {
     return require("../dist/linux-x64/ghostty-opentui.node")
   }
+  if (p === "win32" && a === "x64") {
+    return require("../dist/win32-x64/ghostty-opentui.node")
+  }
+
+  // Unsupported platform fallback
   if (p === "win32") {
-    // Windows fallback - no native module
     return null
   }
 

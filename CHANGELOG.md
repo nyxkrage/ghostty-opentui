@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.9
+
+### Features
+
+- **platform support**: Add cross-compiled native binaries for 5 platforms
+  - Linux: `x64`, `arm64`
+  - macOS: `arm64`, `x64`
+  - Windows: `x64`
+- **build**: Add `scripts/build.ts` for local cross-compilation of all targets
+  - Uses Zig's cross-compilation to build all platforms from a single machine
+  - Run `bun scripts/build.ts` to build all, or `bun scripts/build.ts darwin-arm64` for specific target
+- **ci**: Simplified CI to cross-compile all targets from ubuntu, test on Linux and Windows
+
 ## 1.3.8
 
 ### Performance

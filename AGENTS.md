@@ -2,8 +2,6 @@
 
 This repository uses Zig 0.15.2 and Ghostty's `ghostty-vt` library.
 
-IMPORTANT! this package should be released only via CI! never locally!
-
 ## Architecture
 
 ```
@@ -230,15 +228,4 @@ NEVER update existing changelog bullet points for previous version unless you ad
 
 - do not consider local state truthful when interacting with server. when interacting with the server with rpc or api calls never use state from the render function as input for the api call. this state can easily become stale or not get updated in the closure context. instead prefer using zustand `useStore.getState().stateValue`. notice that useLoaderData or useParams should be fine in this case.
 
-## Publishing
 
-NEVER run `npm publish` locally. CI handles publishing automatically on push to main. Local publishing causes issues because:
-- The `dist/` folder may have outdated or missing binaries for other platforms
-- CI builds fresh binaries for all platforms (darwin-arm64, darwin-x64, linux-arm64, linux-x64)
-- Publishing locally with stale binaries breaks the package for users
-
-When you make a change:
-1. Bump the package.json version
-2. Update CHANGELOG.md
-3. Commit and push to main
-4. CI will build and publish automatically

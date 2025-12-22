@@ -347,13 +347,13 @@ Line3
       await renderOnce()
 
       expect(captureCharFrame()).toMatchInlineSnapshot(`
-"                        
-                        
-                        
-                        
-                        
-                        
-                        
+"┌──────────────────────┐
+│Line 1                │
+│Line 2                │
+│                      │
+│                      │
+│                      │
+└──────────────────────┘
                         
                         
                         
@@ -373,10 +373,10 @@ Line3
       await renderOnce()
 
       expect(captureCharFrame()).toMatchInlineSnapshot(`
-"                        
-                        
-                        
-                        
+"┌──────────────────────┐
+│Line 1                │
+│Line 2                │
+└──────────────────────┘
                         
                         
                         

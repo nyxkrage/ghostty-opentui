@@ -13,60 +13,6 @@ concurrency:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: linux-x64
-          - os: macos-latest
-            target: darwin-arm64
-          - os: macos-15
-            target: darwin-x64
-      fail-fast: true
-
-    runs-on: ${{ matrix.os }}
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Setup Zig
-        uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: 0.15.2
-
-      - name: Build
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 10
-          max_attempts: 3
-          retry_on: error
-          command: zig build -Doptimize=ReleaseFast
-
-      # - name: Run Zig tests
-      #   run: zig build test
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Run Bun tests
-        run: bun test src/index.test.tsx src/highlight.test.ts src/pty-to-html.test.ts src/import-line.test.ts
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: lib-${{ matrix.target }}
-          path: zig-out/lib/ghostty-opentui.node
-
-  # Cross-compile for Linux ARM64
-  build-linux-arm64:
     runs-on: ubuntu-latest
 
     steps:
@@ -80,73 +26,51 @@ jobs:
         with:
           version: 0.15.2
 
-      - name: Build for Linux ARM64
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build all targets
         uses: nick-fields/retry@v3
         with:
-          timeout_minutes: 10
+          timeout_minutes: 15
           max_attempts: 3
           retry_on: error
-          command: zig build -Doptimize=ReleaseFast -Dtarget=aarch64-linux-gnu
+          command: bun scripts/build.ts
+
+      - name: Run tests (Linux x64)
+        run: bun test
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: lib-linux-arm64
-          path: zig-out/lib/ghostty-opentui.node
+          name: dist
+          path: dist/
 
-  publish:
-    needs: [build, build-linux-arm64]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  test-windows:
+    needs: [build]
+    runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          registry-url: "https://registry.npmjs.org"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
 
-      - name: Download Linux x64 artifact
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: lib-linux-x64
-          path: dist/linux-x64
-
-      - name: Download Linux ARM64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: lib-linux-arm64
-          path: dist/linux-arm64
-
-      - name: Download macOS ARM64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: lib-darwin-arm64
-          path: dist/darwin-arm64
-
-      - name: Download macOS x64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: lib-darwin-x64
-          path: dist/darwin-x64
+          name: dist
+          path: dist/
 
       - name: Install dependencies
         run: bun install
 
-      - name: Build TypeScript
-        run: bun run build
-
-      - name: List dist contents
-        run: ls -laR dist/
-
-      - name: Publish to npm
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Run tests
+        run: bun test
