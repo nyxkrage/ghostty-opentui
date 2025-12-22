@@ -12,60 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Build Linux and Windows targets from Ubuntu (cross-compilation works)
-  build-linux:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Setup Zig
-        uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: 0.15.2
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Build Linux and Windows targets
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 15
-          max_attempts: 3
-          retry_on: error
-          command: bun scripts/build.ts linux-x64 linux-arm64 win32-x64
-
-      - name: Run tests (Linux x64)
-        run: bun test
-
-      - name: Upload Linux x64
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-x64
-          path: dist/linux-x64/
-
-      - name: Upload Linux arm64
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-arm64
-          path: dist/linux-arm64/
-
-      - name: Upload Windows x64
-        uses: actions/upload-artifact@v4
-        with:
-          name: win32-x64
-          path: dist/win32-x64/
-
-  # Build macOS ARM64 on macOS ARM64 runner
-  build-macos-arm64:
+  build:
     runs-on: macos-latest
 
     steps:
@@ -87,66 +34,25 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Build darwin-arm64
+      - name: Build all targets
         uses: nick-fields/retry@v3
         with:
           timeout_minutes: 15
           max_attempts: 3
           retry_on: error
-          command: bun scripts/build.ts darwin-arm64
+          command: bun scripts/build.ts
 
       - name: Run tests
         run: bun test
 
-      - name: Upload darwin-arm64
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: darwin-arm64
-          path: dist/darwin-arm64/
+          name: dist
+          path: dist/
 
-  # Build macOS x64 on macOS x64 runner
-  build-macos-x64:
-    runs-on: macos-15
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Setup Zig
-        uses: goto-bus-stop/setup-zig@v2
-        with:
-          version: 0.15.2
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Build darwin-x64
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 15
-          max_attempts: 3
-          retry_on: error
-          command: bun scripts/build.ts darwin-x64
-
-      - name: Run tests
-        run: bun test
-
-      - name: Upload darwin-x64
-        uses: actions/upload-artifact@v4
-        with:
-          name: darwin-x64
-          path: dist/darwin-x64/
-
-  # Test Windows with cross-compiled binary
   test-windows:
-    needs: [build-linux]
+    needs: [build]
     runs-on: windows-latest
 
     steps:
@@ -157,11 +63,35 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Download Windows binary
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: win32-x64
-          path: dist/win32-x64/
+          name: dist
+          path: dist/
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run tests
+        run: bun test
+
+  test-linux:
+    needs: [build]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
 
       - name: Install dependencies
         run: bun install
