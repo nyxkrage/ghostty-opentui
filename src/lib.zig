@@ -1,6 +1,5 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const napigen = if (builtin.is_test) undefined else @import("napigen");
 const ghostty_vt = @import("ghostty-vt");
 const color = ghostty_vt.color;
 const pagepkg = ghostty_vt.page;
@@ -264,16 +263,17 @@ pub fn writeJsonOutput(
     try writer.writeAll("]}");
 }
 
-// Thread-local allocator for NAPI functions
-// The arena is reset at the START of each NAPI call, allowing the previous call's
-// return value to survive until napigen copies it to a JS string.
-threadlocal var arena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+// =============================================================================
+// FFI Arena Allocator
+// =============================================================================
 
-fn getArenaAllocator() std.mem.Allocator {
-    // Reset arena at the start of each call - this frees memory from the previous call
-    // AFTER napigen has already copied the return value to JS
-    _ = arena.reset(.retain_capacity);
-    return arena.allocator();
+// Global arena allocator for FFI functions
+var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+const globalArena = arena.allocator();
+
+/// Free memory allocated by the arena. Call this after you've copied the returned data.
+export fn freeArena() void {
+    _ = arena.reset(.free_all);
 }
 
 // =============================================================================
@@ -355,7 +355,7 @@ const PersistentTerminal = struct {
 };
 
 /// Global storage for persistent terminals
-/// Uses a mutex for thread-safety since NAPI can call from different threads
+/// Uses a mutex for thread-safety since FFI can call from different threads
 var terminals_mutex: std.Thread.Mutex = .{};
 var terminals: ?std.AutoHashMap(u32, *PersistentTerminal) = null;
 
@@ -366,163 +366,32 @@ fn getTerminalsMap() *std.AutoHashMap(u32, *PersistentTerminal) {
     return &terminals.?;
 }
 
-/// Create a new persistent terminal with the given ID
-fn createTerminal(id: u32, cols: u32, rows: u32) !void {
-    terminals_mutex.lock();
-    defer terminals_mutex.unlock();
-
-    const map = getTerminalsMap();
-
-    // If terminal with this ID already exists, destroy it first
-    if (map.get(id)) |existing| {
-        existing.deinit();
-        std.heap.page_allocator.destroy(existing);
-        _ = map.remove(id);
-    }
-
-    // Create new terminal
-    const term_ptr = try std.heap.page_allocator.create(PersistentTerminal);
-    errdefer std.heap.page_allocator.destroy(term_ptr);
-
-    term_ptr.* = try PersistentTerminal.init(
-        std.heap.page_allocator,
-        @intCast(cols),
-        @intCast(rows),
-    );
-
-    // Initialize the stream after the struct is at its final heap location.
-    // This is critical because the stream holds a pointer to the terminal.
-    term_ptr.initStream();
-
-    try map.put(id, term_ptr);
-}
-
-/// Destroy a persistent terminal
-fn destroyTerminal(id: u32) void {
-    terminals_mutex.lock();
-    defer terminals_mutex.unlock();
-
-    const map = getTerminalsMap();
-    if (map.get(id)) |term| {
-        term.deinit();
-        std.heap.page_allocator.destroy(term);
-        _ = map.remove(id);
-    }
-}
-
-/// Feed data to a persistent terminal
-fn feedTerminal(id: u32, data: []const u8) !void {
-    terminals_mutex.lock();
-    defer terminals_mutex.unlock();
-
-    const map = getTerminalsMap();
-    const term = map.get(id) orelse return error.TerminalNotFound;
-    try term.feed(data);
-}
-
-/// Resize a persistent terminal
-fn resizeTerminal(id: u32, cols: u32, rows: u32) !void {
-    terminals_mutex.lock();
-    defer terminals_mutex.unlock();
-
-    const map = getTerminalsMap();
-    const term = map.get(id) orelse return error.TerminalNotFound;
-    try term.resize(@intCast(cols), @intCast(rows));
-}
-
-/// Reset a persistent terminal to initial state
-fn resetTerminal(id: u32) !void {
-    terminals_mutex.lock();
-    defer terminals_mutex.unlock();
-
-    const map = getTerminalsMap();
-    const term = map.get(id) orelse return error.TerminalNotFound;
-    term.reset();
-}
-
-/// Get JSON output from a persistent terminal
-fn getTerminalJson(id: u32, offset: u32, limit: u32) ![]const u8 {
-    terminals_mutex.lock();
-    defer terminals_mutex.unlock();
-
-    const map = getTerminalsMap();
-    const term = map.get(id) orelse return error.TerminalNotFound;
-
-    const alloc = getArenaAllocator();
-    // Note: arena is reset at the START of the next call, not here.
-    // This allows napigen to copy the returned slice to JS before memory is reused.
-
-    const lim: ?usize = if (limit == 0) null else @intCast(limit);
-
-    var output: std.ArrayListAligned(u8, null) = .empty;
-    try writeJsonOutput(output.writer(alloc), &term.terminal, @intCast(offset), lim);
-
-    return output.items;
-}
-
-/// Get plain text output from a persistent terminal
-fn getTerminalText(id: u32) ![]const u8 {
-    terminals_mutex.lock();
-    defer terminals_mutex.unlock();
-
-    const map = getTerminalsMap();
-    const term = map.get(id) orelse return error.TerminalNotFound;
-
-    const alloc = getArenaAllocator();
-    // Note: arena is reset at the START of the next call, not here.
-
-    var builder: std.Io.Writer.Allocating = .init(alloc);
-    var fmt: formatter.TerminalFormatter = formatter.TerminalFormatter.init(&term.terminal, .plain);
-    try fmt.format(&builder.writer);
-
-    return builder.writer.buffered();
-}
-
-/// Get cursor position from a persistent terminal as [x, y] JSON
-fn getTerminalCursor(id: u32) ![]const u8 {
-    terminals_mutex.lock();
-    defer terminals_mutex.unlock();
-
-    const map = getTerminalsMap();
-    const term = map.get(id) orelse return error.TerminalNotFound;
-
-    const screen = term.terminal.screens.active;
-
-    const alloc = getArenaAllocator();
-    // Note: arena is reset at the START of the next call, not here.
-
-    return std.fmt.allocPrint(alloc, "[{},{}]", .{ screen.cursor.x, screen.cursor.y });
-}
-
-/// Check if terminal is ready for reading (parser in ground state).
-/// Returns true if all escape sequences have been fully processed.
-fn isTerminalReady(id: u32) !bool {
-    terminals_mutex.lock();
-    defer terminals_mutex.unlock();
-
-    const map = getTerminalsMap();
-    const term = map.get(id) orelse return error.TerminalNotFound;
-
-    return term.isReady();
-}
+// =============================================================================
+// FFI Export Functions - Stateless (one terminal per call)
+// =============================================================================
 
 /// Convert PTY input to JSON format
-/// Returns JSON string with terminal data (cols, rows, cursor, lines with styled spans)
+/// Returns pointer to JSON string, writes length to out_len
 /// When limit is set, uses chunked parsing with early exit for better performance.
-fn ptyToJson(input: []const u8, cols: u32, rows: u32, offset: u32, limit: u32) ![]const u8 {
-    const alloc = getArenaAllocator();
-    // Note: arena is reset at the START of the next call, not here.
-    // This allows napigen to copy the returned slice to JS before memory is reused.
-
-    const lim: ?usize = if (limit == 0) null else @intCast(limit);
+export fn ptyToJson(
+    input_ptr: [*]const u8,
+    input_len: usize,
+    cols: u16,
+    rows: u16,
+    offset: usize,
+    limit: usize,
+    out_len: *usize,
+) ?[*]u8 {
+    const input = input_ptr[0..input_len];
+    const lim: ?usize = if (limit == 0) null else limit;
 
     // Use unlimited scrollback so we don't lose content
-    var t: ghostty_vt.Terminal = try ghostty_vt.Terminal.init(alloc, .{
-        .cols = @intCast(cols),
-        .rows = @intCast(rows),
+    var t: ghostty_vt.Terminal = ghostty_vt.Terminal.init(globalArena, .{
+        .cols = cols,
+        .rows = rows,
         .max_scrollback = std.math.maxInt(usize),
-    });
-    defer t.deinit(alloc);
+    }) catch return null;
+    defer t.deinit(globalArena);
 
     // Enable linefeed mode so LF (\n) also performs carriage return (moves to column 0)
     t.modes.set(.linefeed, true);
@@ -539,7 +408,7 @@ fn ptyToJson(input: []const u8, cols: u32, rows: u32, offset: u32, limit: u32) !
 
         while (pos < input.len) {
             const end = @min(pos + chunk_size, input.len);
-            try stream.nextSlice(input[pos..end]);
+            stream.nextSlice(input[pos..end]) catch return null;
             pos = end;
 
             // Check if we have enough lines and parser is in ground state
@@ -552,27 +421,33 @@ fn ptyToJson(input: []const u8, cols: u32, rows: u32, offset: u32, limit: u32) !
         }
     } else {
         // No limit - parse everything
-        try stream.nextSlice(input);
+        stream.nextSlice(input) catch return null;
     }
 
     var output: std.ArrayListAligned(u8, null) = .empty;
-    try writeJsonOutput(output.writer(alloc), &t, @intCast(offset), lim);
+    writeJsonOutput(output.writer(globalArena), &t, offset, lim) catch return null;
 
-    return output.items;
+    out_len.* = output.items.len;
+    return output.items.ptr;
 }
 
 /// Convert PTY input to plain text (strips ANSI escape codes)
-fn ptyToText(input: []const u8, cols: u32, rows: u32) ![]const u8 {
-    const alloc = getArenaAllocator();
-    // Note: arena is reset at the START of the next call, not here.
+export fn ptyToText(
+    input_ptr: [*]const u8,
+    input_len: usize,
+    cols: u16,
+    rows: u16,
+    out_len: *usize,
+) ?[*]u8 {
+    const input = input_ptr[0..input_len];
 
     // Use unlimited scrollback so we don't lose content
-    var t: ghostty_vt.Terminal = try ghostty_vt.Terminal.init(alloc, .{
-        .cols = @intCast(cols),
-        .rows = @intCast(rows),
+    var t: ghostty_vt.Terminal = ghostty_vt.Terminal.init(globalArena, .{
+        .cols = cols,
+        .rows = rows,
         .max_scrollback = std.math.maxInt(usize),
-    });
-    defer t.deinit(alloc);
+    }) catch return null;
+    defer t.deinit(globalArena);
 
     // Enable linefeed mode so LF (\n) also performs carriage return (moves to column 0)
     t.modes.set(.linefeed, true);
@@ -580,28 +455,35 @@ fn ptyToText(input: []const u8, cols: u32, rows: u32) ![]const u8 {
     var stream = t.vtStream();
     defer stream.deinit();
 
-    try stream.nextSlice(input);
+    stream.nextSlice(input) catch return null;
 
     // Use the ghostty formatter with plain format to get just the text
-    var builder: std.Io.Writer.Allocating = .init(alloc);
+    var builder: std.Io.Writer.Allocating = .init(globalArena);
     var fmt: formatter.TerminalFormatter = formatter.TerminalFormatter.init(&t, .plain);
-    try fmt.format(&builder.writer);
+    fmt.format(&builder.writer) catch return null;
 
-    return builder.writer.buffered();
+    const output = builder.writer.buffered();
+    out_len.* = output.len;
+    return @constCast(output.ptr);
 }
 
 /// Convert PTY input to styled HTML
-fn ptyToHtml(input: []const u8, cols: u32, rows: u32) ![]const u8 {
-    const alloc = getArenaAllocator();
-    // Note: arena is reset at the START of the next call, not here.
+export fn ptyToHtml(
+    input_ptr: [*]const u8,
+    input_len: usize,
+    cols: u16,
+    rows: u16,
+    out_len: *usize,
+) ?[*]u8 {
+    const input = input_ptr[0..input_len];
 
     // Use unlimited scrollback so we don't lose content
-    var t: ghostty_vt.Terminal = try ghostty_vt.Terminal.init(alloc, .{
-        .cols = @intCast(cols),
-        .rows = @intCast(rows),
+    var t: ghostty_vt.Terminal = ghostty_vt.Terminal.init(globalArena, .{
+        .cols = cols,
+        .rows = rows,
         .max_scrollback = std.math.maxInt(usize),
-    });
-    defer t.deinit(alloc);
+    }) catch return null;
+    defer t.deinit(globalArena);
 
     // Enable linefeed mode so LF (\n) also performs carriage return (moves to column 0)
     t.modes.set(.linefeed, true);
@@ -609,42 +491,171 @@ fn ptyToHtml(input: []const u8, cols: u32, rows: u32) ![]const u8 {
     var stream = t.vtStream();
     defer stream.deinit();
 
-    try stream.nextSlice(input);
+    stream.nextSlice(input) catch return null;
 
     // Use the ghostty formatter with html format to get styled HTML
-    var builder: std.Io.Writer.Allocating = .init(alloc);
+    var builder: std.Io.Writer.Allocating = .init(globalArena);
     var fmt: formatter.TerminalFormatter = formatter.TerminalFormatter.init(&t, .html);
-    try fmt.format(&builder.writer);
+    fmt.format(&builder.writer) catch return null;
 
-    return builder.writer.buffered();
+    const output = builder.writer.buffered();
+    out_len.* = output.len;
+    return @constCast(output.ptr);
 }
 
-// Define the NAPI module (only when not testing)
-comptime {
-    if (!builtin.is_test) {
-        napigen.defineModule(initModule);
+// =============================================================================
+// FFI Export Functions - Persistent Terminal API
+// =============================================================================
+
+/// Create a new persistent terminal with the given ID
+export fn createTerminal(id: u32, cols: u32, rows: u32) bool {
+    terminals_mutex.lock();
+    defer terminals_mutex.unlock();
+
+    const map = getTerminalsMap();
+
+    // If terminal with this ID already exists, destroy it first
+    if (map.get(id)) |existing| {
+        existing.deinit();
+        std.heap.page_allocator.destroy(existing);
+        _ = map.remove(id);
+    }
+
+    // Create new terminal
+    const term_ptr = std.heap.page_allocator.create(PersistentTerminal) catch return false;
+
+    term_ptr.* = PersistentTerminal.init(
+        std.heap.page_allocator,
+        @intCast(cols),
+        @intCast(rows),
+    ) catch {
+        std.heap.page_allocator.destroy(term_ptr);
+        return false;
+    };
+
+    // Initialize the stream after the struct is at its final heap location.
+    // This is critical because the stream holds a pointer to the terminal.
+    term_ptr.initStream();
+
+    map.put(id, term_ptr) catch {
+        term_ptr.deinit();
+        std.heap.page_allocator.destroy(term_ptr);
+        return false;
+    };
+
+    return true;
+}
+
+/// Destroy a persistent terminal
+export fn destroyTerminal(id: u32) void {
+    terminals_mutex.lock();
+    defer terminals_mutex.unlock();
+
+    const map = getTerminalsMap();
+    if (map.get(id)) |term| {
+        term.deinit();
+        std.heap.page_allocator.destroy(term);
+        _ = map.remove(id);
     }
 }
 
-fn initModule(js: *napigen.JsContext, exports: napigen.napi_value) anyerror!napigen.napi_value {
-    // Stateless functions (create terminal each call)
-    try js.setNamedProperty(exports, "ptyToJson", try js.createFunction(ptyToJson));
-    try js.setNamedProperty(exports, "ptyToText", try js.createFunction(ptyToText));
-    try js.setNamedProperty(exports, "ptyToHtml", try js.createFunction(ptyToHtml));
+/// Feed data to a persistent terminal
+export fn feedTerminal(id: u32, data_ptr: [*]const u8, data_len: usize) bool {
+    terminals_mutex.lock();
+    defer terminals_mutex.unlock();
 
-    // Persistent terminal management functions
-    try js.setNamedProperty(exports, "createTerminal", try js.createFunction(createTerminal));
-    try js.setNamedProperty(exports, "destroyTerminal", try js.createFunction(destroyTerminal));
-    try js.setNamedProperty(exports, "feedTerminal", try js.createFunction(feedTerminal));
-    try js.setNamedProperty(exports, "resizeTerminal", try js.createFunction(resizeTerminal));
-    try js.setNamedProperty(exports, "resetTerminal", try js.createFunction(resetTerminal));
-    try js.setNamedProperty(exports, "getTerminalJson", try js.createFunction(getTerminalJson));
-    try js.setNamedProperty(exports, "getTerminalText", try js.createFunction(getTerminalText));
-    try js.setNamedProperty(exports, "getTerminalCursor", try js.createFunction(getTerminalCursor));
-    try js.setNamedProperty(exports, "isTerminalReady", try js.createFunction(isTerminalReady));
-
-    return exports;
+    const map = getTerminalsMap();
+    const term = map.get(id) orelse return false;
+    term.feed(data_ptr[0..data_len]) catch return false;
+    return true;
 }
+
+/// Resize a persistent terminal
+export fn resizeTerminal(id: u32, cols: u32, rows: u32) bool {
+    terminals_mutex.lock();
+    defer terminals_mutex.unlock();
+
+    const map = getTerminalsMap();
+    const term = map.get(id) orelse return false;
+    term.resize(@intCast(cols), @intCast(rows)) catch return false;
+    return true;
+}
+
+/// Reset a persistent terminal to initial state
+export fn resetTerminal(id: u32) bool {
+    terminals_mutex.lock();
+    defer terminals_mutex.unlock();
+
+    const map = getTerminalsMap();
+    const term = map.get(id) orelse return false;
+    term.reset();
+    return true;
+}
+
+/// Get JSON output from a persistent terminal
+export fn getTerminalJson(id: u32, offset: u32, limit: u32, out_len: *usize) ?[*]u8 {
+    terminals_mutex.lock();
+    defer terminals_mutex.unlock();
+
+    const map = getTerminalsMap();
+    const term = map.get(id) orelse return null;
+
+    const lim: ?usize = if (limit == 0) null else @intCast(limit);
+
+    var output: std.ArrayListAligned(u8, null) = .empty;
+    writeJsonOutput(output.writer(globalArena), &term.terminal, @intCast(offset), lim) catch return null;
+
+    out_len.* = output.items.len;
+    return output.items.ptr;
+}
+
+/// Get plain text output from a persistent terminal
+export fn getTerminalText(id: u32, out_len: *usize) ?[*]u8 {
+    terminals_mutex.lock();
+    defer terminals_mutex.unlock();
+
+    const map = getTerminalsMap();
+    const term = map.get(id) orelse return null;
+
+    var builder: std.Io.Writer.Allocating = .init(globalArena);
+    var fmt: formatter.TerminalFormatter = formatter.TerminalFormatter.init(&term.terminal, .plain);
+    fmt.format(&builder.writer) catch return null;
+
+    const output = builder.writer.buffered();
+    out_len.* = output.len;
+    return @constCast(output.ptr);
+}
+
+/// Get cursor position from a persistent terminal as [x, y] JSON
+export fn getTerminalCursor(id: u32, out_len: *usize) ?[*]u8 {
+    terminals_mutex.lock();
+    defer terminals_mutex.unlock();
+
+    const map = getTerminalsMap();
+    const term = map.get(id) orelse return null;
+
+    const screen = term.terminal.screens.active;
+
+    const output = std.fmt.allocPrint(globalArena, "[{},{}]", .{ screen.cursor.x, screen.cursor.y }) catch return null;
+    out_len.* = output.len;
+    return @constCast(output.ptr);
+}
+
+/// Check if terminal is ready for reading (parser in ground state).
+/// Returns 1 if ready, 0 if not ready, -1 if terminal not found.
+export fn isTerminalReady(id: u32) i32 {
+    terminals_mutex.lock();
+    defer terminals_mutex.unlock();
+
+    const map = getTerminalsMap();
+    const term = map.get(id) orelse return -1;
+
+    return if (term.isReady()) 1 else 0;
+}
+
+// =============================================================================
+// Tests
+// =============================================================================
 
 const testing = std.testing;
 

@@ -10,22 +10,23 @@ const ZIG_OUT = path.join(ROOT, "zig-out", "lib")
 interface Target {
   name: string
   zigTarget: string | null // null means native
+  libSuffix: string // .dylib, .so, or .dll
 }
 
 const TARGETS: Target[] = [
-  { name: "linux-x64", zigTarget: "x86_64-linux-gnu" },
-  { name: "linux-arm64", zigTarget: "aarch64-linux-gnu" },
+  { name: "linux-x64", zigTarget: "x86_64-linux-gnu", libSuffix: ".so" },
+  { name: "linux-arm64", zigTarget: "aarch64-linux-gnu", libSuffix: ".so" },
   // musl targets disabled - ghostty's C++ deps (simdutf, highway) fail with PIC errors
-  // { name: "linux-x64-musl", zigTarget: "x86_64-linux-musl" },
-  // { name: "linux-arm64-musl", zigTarget: "aarch64-linux-musl" },
-  { name: "darwin-x64", zigTarget: "x86_64-macos" },
-  { name: "darwin-arm64", zigTarget: "aarch64-macos" },
-  { name: "win32-x64", zigTarget: "x86_64-windows-gnu" },
+  // { name: "linux-x64-musl", zigTarget: "x86_64-linux-musl", libSuffix: ".so" },
+  // { name: "linux-arm64-musl", zigTarget: "aarch64-linux-musl", libSuffix: ".so" },
+  { name: "darwin-x64", zigTarget: "x86_64-macos", libSuffix: ".dylib" },
+  { name: "darwin-arm64", zigTarget: "aarch64-macos", libSuffix: ".dylib" },
+  { name: "win32-x64", zigTarget: "x86_64-windows-gnu", libSuffix: ".dll" },
 ]
 
 async function build(target: Target): Promise<boolean> {
   const targetDir = path.join(DIST, target.name)
-  const nodeFile = path.join(targetDir, "ghostty-opentui.node")
+  const destFile = path.join(targetDir, `libghostty-opentui${target.libSuffix}`)
 
   console.log(`\n--- Building ${target.name} ---`)
 
@@ -40,32 +41,28 @@ async function build(target: Target): Promise<boolean> {
   try {
     await $`zig build ${args}`.cwd(ROOT)
 
-    // Find the output file (might have different extensions on Windows)
-    let srcFile = path.join(ZIG_OUT, "ghostty-opentui.node")
-    if (!fs.existsSync(srcFile)) {
-      // Windows builds produce .dll
-      srcFile = path.join(ZIG_OUT, "ghostty-opentui.dll")
-    }
-    if (!fs.existsSync(srcFile)) {
-      // Also check for .so
-      srcFile = path.join(ZIG_OUT, "libghostty-opentui.so")
-    }
+    // Find the output file
+    const srcFile = path.join(ZIG_OUT, `libghostty-opentui${target.libSuffix}`)
 
     if (!fs.existsSync(srcFile)) {
       console.error(`  ERROR: No output file found for ${target.name}`)
-      console.error(`  Checked: ${ZIG_OUT}`)
-      const files = fs.readdirSync(ZIG_OUT).join(", ")
-      console.error(`  Available files: ${files}`)
+      console.error(`  Expected: ${srcFile}`)
+      if (fs.existsSync(ZIG_OUT)) {
+        const files = fs.readdirSync(ZIG_OUT).join(", ")
+        console.error(`  Available files: ${files}`)
+      } else {
+        console.error(`  zig-out/lib directory does not exist`)
+      }
       return false
     }
 
     // Copy to dist
     fs.mkdirSync(targetDir, { recursive: true })
-    fs.copyFileSync(srcFile, nodeFile)
+    fs.copyFileSync(srcFile, destFile)
 
-    const stats = fs.statSync(nodeFile)
+    const stats = fs.statSync(destFile)
     const sizeMB = (stats.size / 1024 / 1024).toFixed(2)
-    console.log(`  OK: ${nodeFile} (${sizeMB} MB)`)
+    console.log(`  OK: ${destFile} (${sizeMB} MB)`)
     return true
   } catch (error) {
     console.error(`  FAILED: ${target.name}`)

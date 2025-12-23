@@ -1,7 +1,119 @@
+import { dlopen, FFIType, ptr, toArrayBuffer, suffix } from "bun:ffi"
+import path from "path"
+import { platform, arch } from "os"
 import stripAnsi from "strip-ansi"
-import { native, type NativeModule } from "./native-lib.cjs"
 
-export type { NativeModule }
+// =============================================================================
+// FFI Library Loading
+// =============================================================================
+
+function getLibPath(): string | null {
+  const p = platform()
+  const a = arch()
+
+  // Try development path first
+  const devPath = path.join(import.meta.dir, "..", "zig-out", "lib", `libghostty-opentui.${suffix}`)
+  try {
+    // Check if file exists by trying to open it
+    Bun.file(devPath).size
+    return devPath
+  } catch {
+    // Development path doesn't exist, try dist paths
+  }
+
+  // Map platform/arch to dist path
+  if (p === "darwin" && a === "arm64") {
+    return path.join(import.meta.dir, "..", "dist", "darwin-arm64", `libghostty-opentui.${suffix}`)
+  }
+  if (p === "darwin" && a === "x64") {
+    return path.join(import.meta.dir, "..", "dist", "darwin-x64", `libghostty-opentui.${suffix}`)
+  }
+  if (p === "linux" && a === "arm64") {
+    return path.join(import.meta.dir, "..", "dist", "linux-arm64", `libghostty-opentui.${suffix}`)
+  }
+  if (p === "linux" && a === "x64") {
+    return path.join(import.meta.dir, "..", "dist", "linux-x64", `libghostty-opentui.${suffix}`)
+  }
+
+  // Windows or unsupported platform - return null for fallback
+  return null
+}
+
+// Try to load the native library
+let lib: ReturnType<typeof dlopen<typeof symbols>> | null = null
+const symbols = {
+  // Arena management
+  freeArena: {
+    args: [] as const,
+    returns: FFIType.void,
+  },
+
+  // Stateless functions
+  ptyToJson: {
+    args: [FFIType.ptr, FFIType.usize, FFIType.u16, FFIType.u16, FFIType.usize, FFIType.usize, FFIType.ptr] as const,
+    returns: FFIType.ptr,
+  },
+  ptyToText: {
+    args: [FFIType.ptr, FFIType.usize, FFIType.u16, FFIType.u16, FFIType.ptr] as const,
+    returns: FFIType.ptr,
+  },
+  ptyToHtml: {
+    args: [FFIType.ptr, FFIType.usize, FFIType.u16, FFIType.u16, FFIType.ptr] as const,
+    returns: FFIType.ptr,
+  },
+
+  // Persistent terminal functions
+  createTerminal: {
+    args: [FFIType.u32, FFIType.u32, FFIType.u32] as const,
+    returns: FFIType.bool,
+  },
+  destroyTerminal: {
+    args: [FFIType.u32] as const,
+    returns: FFIType.void,
+  },
+  feedTerminal: {
+    args: [FFIType.u32, FFIType.ptr, FFIType.usize] as const,
+    returns: FFIType.bool,
+  },
+  resizeTerminal: {
+    args: [FFIType.u32, FFIType.u32, FFIType.u32] as const,
+    returns: FFIType.bool,
+  },
+  resetTerminal: {
+    args: [FFIType.u32] as const,
+    returns: FFIType.bool,
+  },
+  getTerminalJson: {
+    args: [FFIType.u32, FFIType.u32, FFIType.u32, FFIType.ptr] as const,
+    returns: FFIType.ptr,
+  },
+  getTerminalText: {
+    args: [FFIType.u32, FFIType.ptr] as const,
+    returns: FFIType.ptr,
+  },
+  getTerminalCursor: {
+    args: [FFIType.u32, FFIType.ptr] as const,
+    returns: FFIType.ptr,
+  },
+  isTerminalReady: {
+    args: [FFIType.u32] as const,
+    returns: FFIType.i32,
+  },
+} as const
+
+const libPath = getLibPath()
+if (libPath) {
+  try {
+    lib = dlopen(libPath, symbols)
+  } catch {
+    // Failed to load library
+    lib = null
+  }
+}
+
+// =============================================================================
+// Type Definitions
+// =============================================================================
 
 export interface TerminalSpan {
   text: string
@@ -31,6 +143,28 @@ export interface PtyToJsonOptions {
   limit?: number
 }
 
+// =============================================================================
+// Helper Functions
+// =============================================================================
+
+function readStringFromPointer(resultPtr: number | null, outLenBuffer: BigUint64Array): string {
+  if (!resultPtr) {
+    throw new Error("Native function returned null")
+  }
+
+  const outLen = Number(outLenBuffer[0])
+  const buffer = toArrayBuffer(resultPtr, 0, outLen)
+  const str = new TextDecoder().decode(buffer)
+
+  lib!.symbols.freeArena()
+
+  return str
+}
+
+// =============================================================================
+// Fallback Implementations (for Windows or when native unavailable)
+// =============================================================================
+
 /**
  * Windows fallback: strips ANSI codes and returns plain text lines
  */
@@ -58,9 +192,36 @@ function ptyToJsonFallback(input: Buffer | Uint8Array | string, options: PtyToJs
   }
 }
 
+/**
+ * Windows fallback: strips ANSI codes and returns plain text
+ */
+function ptyToTextFallback(input: Buffer | Uint8Array | string): string {
+  const text = typeof input === "string" ? input : input.toString("utf-8")
+  return stripAnsi(text)
+}
+
+/**
+ * Windows fallback: wraps plain text in pre tags
+ */
+function ptyToHtmlFallback(input: Buffer | Uint8Array | string): string {
+  const text = typeof input === "string" ? input : input.toString("utf-8")
+  const plainText = stripAnsi(text)
+  // Escape HTML entities
+  const escaped = plainText
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+  return `<pre style="font-family: monospace;">${escaped}</pre>`
+}
+
+// =============================================================================
+// Public API
+// =============================================================================
+
 export function ptyToJson(input: Buffer | Uint8Array | string, options: PtyToJsonOptions = {}): TerminalData {
   // Fallback for Windows or if native module not available
-  if (!native) {
+  if (!lib) {
     return ptyToJsonFallback(input, options)
   }
 
@@ -80,7 +241,15 @@ export function ptyToJson(input: Buffer | Uint8Array | string, options: PtyToJso
     }
   }
 
-  const jsonStr = native.ptyToJson(inputStr, cols, rows, offset, limit)
+  const inputBuffer = Buffer.from(inputStr)
+  const inputPtr = ptr(inputBuffer)
+
+  const outLenBuffer = new BigUint64Array(1)
+  const outLenPtr = ptr(outLenBuffer)
+
+  const resultPtr = lib.symbols.ptyToJson(inputPtr, inputBuffer.length, cols, rows, offset, limit, outLenPtr)
+
+  const jsonStr = readStringFromPointer(resultPtr, outLenBuffer)
 
   const raw = JSON.parse(jsonStr) as {
     cols: number
@@ -115,14 +284,6 @@ export interface PtyToTextOptions {
 }
 
 /**
- * Windows fallback: strips ANSI codes and returns plain text
- */
-function ptyToTextFallback(input: Buffer | Uint8Array | string, options: PtyToTextOptions = {}): string {
-  const text = typeof input === "string" ? input : input.toString("utf-8")
-  return stripAnsi(text)
-}
-
-/**
  * Strips ANSI escape codes from input and returns plain text.
  * Uses the terminal emulator to properly process escape sequences,
  * then outputs only the visible text content.
@@ -131,8 +292,8 @@ function ptyToTextFallback(input: Buffer | Uint8Array | string, options: PtyToTe
  */
 export function ptyToText(input: Buffer | Uint8Array | string, options: PtyToTextOptions = {}): string {
   // Fallback for Windows or if native module not available
-  if (!native) {
-    return ptyToTextFallback(input, options)
+  if (!lib) {
+    return ptyToTextFallback(input)
   }
 
   // Large rows = less scrolling = fewer pages = cheaper
@@ -146,27 +307,20 @@ export function ptyToText(input: Buffer | Uint8Array | string, options: PtyToTex
     return ""
   }
 
-  return native.ptyToText(inputStr, cols, rows)
+  const inputBuffer = Buffer.from(inputStr)
+  const inputPtr = ptr(inputBuffer)
+
+  const outLenBuffer = new BigUint64Array(1)
+  const outLenPtr = ptr(outLenBuffer)
+
+  const resultPtr = lib.symbols.ptyToText(inputPtr, inputBuffer.length, cols, rows, outLenPtr)
+
+  return readStringFromPointer(resultPtr, outLenBuffer)
 }
 
 export interface PtyToHtmlOptions {
   cols?: number
   rows?: number
-}
-
-/**
- * Windows fallback: wraps plain text in pre tags
- */
-function ptyToHtmlFallback(input: Buffer | Uint8Array | string, options: PtyToHtmlOptions = {}): string {
-  const text = typeof input === "string" ? input : input.toString("utf-8")
-  const plainText = stripAnsi(text)
-  // Escape HTML entities
-  const escaped = plainText
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-  return `<pre style="font-family: monospace;">${escaped}</pre>`
 }
 
 /**
@@ -178,8 +332,8 @@ function ptyToHtmlFallback(input: Buffer | Uint8Array | string, options: PtyToHt
  */
 export function ptyToHtml(input: Buffer | Uint8Array | string, options: PtyToHtmlOptions = {}): string {
   // Fallback for Windows or if native module not available
-  if (!native) {
-    return ptyToHtmlFallback(input, options)
+  if (!lib) {
+    return ptyToHtmlFallback(input)
   }
 
   // Large rows = less scrolling = fewer pages = cheaper
@@ -193,7 +347,15 @@ export function ptyToHtml(input: Buffer | Uint8Array | string, options: PtyToHtm
     return ""
   }
 
-  return native.ptyToHtml(inputStr, cols, rows)
+  const inputBuffer = Buffer.from(inputStr)
+  const inputPtr = ptr(inputBuffer)
+
+  const outLenBuffer = new BigUint64Array(1)
+  const outLenPtr = ptr(outLenBuffer)
+
+  const resultPtr = lib.symbols.ptyToHtml(inputPtr, inputBuffer.length, cols, rows, outLenPtr)
+
+  return readStringFromPointer(resultPtr, outLenBuffer)
 }
 
 export const StyleFlags = {
@@ -222,7 +384,7 @@ function generateTerminalId(): number {
  * Check if native persistent terminal API is available
  */
 export function hasPersistentTerminalSupport(): boolean {
-  return native !== null && typeof native.createTerminal === "function"
+  return lib !== null
 }
 
 export interface PersistentTerminalOptions {
@@ -241,7 +403,7 @@ export class PersistentTerminal {
   private _destroyed = false
 
   constructor(options: PersistentTerminalOptions = {}) {
-    if (!native) {
+    if (!lib) {
       throw new Error("Native module not available - PersistentTerminal requires native support")
     }
 
@@ -249,7 +411,10 @@ export class PersistentTerminal {
     this._cols = options.cols ?? 120
     this._rows = options.rows ?? 40
 
-    native.createTerminal(this._id, this._cols, this._rows)
+    const success = lib.symbols.createTerminal(this._id, this._cols, this._rows)
+    if (!success) {
+      throw new Error("Failed to create terminal")
+    }
   }
 
   /** The unique identifier for this terminal */
@@ -287,7 +452,12 @@ export class PersistentTerminal {
       // Uint8Array - use TextDecoder
       str = new TextDecoder("utf-8").decode(data)
     }
-    native!.feedTerminal(this._id, str)
+
+    const buffer = Buffer.from(str)
+    const success = lib!.symbols.feedTerminal(this._id, ptr(buffer), buffer.length)
+    if (!success) {
+      throw new Error("Failed to feed terminal - terminal may not exist")
+    }
   }
 
   /**
@@ -297,7 +467,10 @@ export class PersistentTerminal {
     this.assertNotDestroyed()
     this._cols = cols
     this._rows = rows
-    native!.resizeTerminal(this._id, cols, rows)
+    const success = lib!.symbols.resizeTerminal(this._id, cols, rows)
+    if (!success) {
+      throw new Error("Failed to resize terminal - terminal may not exist")
+    }
   }
 
   /**
@@ -306,7 +479,10 @@ export class PersistentTerminal {
    */
   reset(): void {
     this.assertNotDestroyed()
-    native!.resetTerminal(this._id)
+    const success = lib!.symbols.resetTerminal(this._id)
+    if (!success) {
+      throw new Error("Failed to reset terminal - terminal may not exist")
+    }
   }
 
   /**
@@ -316,7 +492,15 @@ export class PersistentTerminal {
     this.assertNotDestroyed()
     const { offset = 0, limit = 0 } = options
 
-    const jsonStr = native!.getTerminalJson(this._id, offset, limit)
+    const outLenBuffer = new BigUint64Array(1)
+    const outLenPtr = ptr(outLenBuffer)
+
+    const resultPtr = lib!.symbols.getTerminalJson(this._id, offset, limit, outLenPtr)
+    if (!resultPtr) {
+      throw new Error("Failed to get terminal JSON - terminal may not exist")
+    }
+
+    const jsonStr = readStringFromPointer(resultPtr, outLenBuffer)
     const raw = JSON.parse(jsonStr) as {
       cols: number
       rows: number
@@ -349,7 +533,16 @@ export class PersistentTerminal {
    */
   getText(): string {
     this.assertNotDestroyed()
-    return native!.getTerminalText(this._id)
+
+    const outLenBuffer = new BigUint64Array(1)
+    const outLenPtr = ptr(outLenBuffer)
+
+    const resultPtr = lib!.symbols.getTerminalText(this._id, outLenPtr)
+    if (!resultPtr) {
+      throw new Error("Failed to get terminal text - terminal may not exist")
+    }
+
+    return readStringFromPointer(resultPtr, outLenBuffer)
   }
 
   /**
@@ -357,20 +550,33 @@ export class PersistentTerminal {
    */
   getCursor(): [number, number] {
     this.assertNotDestroyed()
-    const json = native!.getTerminalCursor(this._id)
-    return JSON.parse(json) as [number, number]
+
+    const outLenBuffer = new BigUint64Array(1)
+    const outLenPtr = ptr(outLenBuffer)
+
+    const resultPtr = lib!.symbols.getTerminalCursor(this._id, outLenPtr)
+    if (!resultPtr) {
+      throw new Error("Failed to get terminal cursor - terminal may not exist")
+    }
+
+    const jsonStr = readStringFromPointer(resultPtr, outLenBuffer)
+    return JSON.parse(jsonStr) as [number, number]
   }
 
   /**
    * Check if the terminal is ready for reading.
    * Returns true if the parser is in ground state, meaning all escape
    * sequences have been fully processed.
-   * 
+   *
    * Use this after feed() to ensure you're not reading partial state.
    */
   isReady(): boolean {
     this.assertNotDestroyed()
-    return native!.isTerminalReady(this._id)
+    const result = lib!.symbols.isTerminalReady(this._id)
+    if (result === -1) {
+      throw new Error("Failed to check terminal ready state - terminal may not exist")
+    }
+    return result === 1
   }
 
   /**
@@ -380,7 +586,7 @@ export class PersistentTerminal {
   destroy(): void {
     if (this._destroyed) return
     this._destroyed = true
-    native!.destroyTerminal(this._id)
+    lib!.symbols.destroyTerminal(this._id)
   }
 
   private assertNotDestroyed(): void {
