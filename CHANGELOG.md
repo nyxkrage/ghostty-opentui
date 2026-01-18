@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.3.13
+
+### Features
+
+- **terminal-buffer**: Add `defaultForegroundColor` option to configure the foreground color for text without explicit ANSI color codes
+  - Accepts hex strings (e.g., `"#ffffff"`) or RGBA objects
+  - Defaults to `"#d4d4d4"` (muted gray) for backward compatibility
+  - Dynamically changeable via the `defaultForegroundColor` property
+  - Example: `<ghostty-terminal ansi={ansi} defaultForegroundColor="#ffffff" />`
+- **tui**: Add `fg-color-example.tsx` demo to showcase configurable foreground colors
+
+### Fixes
+
+- **package.json**: Add `^` to `@opentui/react` version to allow both core and react to upgrade together (fixes segfault when versions mismatch)
+
 ## 1.3.11
 
 - Remove ghostty submodule, fetch as zig dependency instead

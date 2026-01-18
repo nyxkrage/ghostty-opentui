@@ -11,6 +11,17 @@ import { ptyToJson, PersistentTerminal, hasPersistentTerminalSupport, type Termi
 const DEFAULT_FG = RGBA.fromHex("#d4d4d4")
 
 /**
+ * Parses a color value into an RGBA object.
+ * Accepts hex strings (e.g., "#ffffff") or RGBA objects.
+ */
+function parseColor(color: string | RGBA): RGBA {
+  if (typeof color === "string") {
+    return RGBA.fromHex(color)
+  }
+  return color
+}
+
+/**
  * Defines a region to highlight in the terminal output.
  */
 export interface HighlightRegion {
@@ -37,15 +48,15 @@ const TextAttributes = {
   STRIKETHROUGH: 1 << 7,
 }
 
-function convertSpanToChunk(span: TerminalSpan): TextChunk {
+function convertSpanToChunk(span: TerminalSpan, defaultFg: RGBA = DEFAULT_FG): TextChunk {
   const { text, fg, bg, flags } = span
 
-  let fgColor = fg ? RGBA.fromHex(fg) : DEFAULT_FG
+  let fgColor = fg ? RGBA.fromHex(fg) : defaultFg
   let bgColor = bg ? RGBA.fromHex(bg) : undefined
 
   if (flags & StyleFlags.INVERSE) {
     const temp = fgColor
-    fgColor = bgColor || DEFAULT_FG
+    fgColor = bgColor || defaultFg
     bgColor = temp
   }
 
@@ -157,20 +168,21 @@ function makeCursorChunk(
   char: string,
   style: "block" | "underline",
   original?: TextChunk,
+  defaultFg: RGBA = DEFAULT_FG,
 ): TextChunk {
   if (style === "block") {
     return {
       __isChunk: true,
       text: char,
       fg: original?.bg || RGBA.fromHex("#1e1e1e"),
-      bg: original?.fg || DEFAULT_FG,
+      bg: original?.fg || defaultFg,
       attributes: original?.attributes ?? 0,
     }
   }
   return {
     __isChunk: true,
     text: char,
-    fg: original?.fg || DEFAULT_FG,
+    fg: original?.fg || defaultFg,
     bg: original?.bg,
     attributes: (original?.attributes ?? 0) | TextAttributes.UNDERLINE,
   }
@@ -185,12 +197,13 @@ function applyCursorToLine(
   chunks: TextChunk[],
   cursorX: number,
   cursorStyle: "block" | "underline",
+  defaultFg: RGBA = DEFAULT_FG,
 ): TextChunk[] {
   const totalLen = chunks.reduce((sum, c) => sum + c.text.length, 0)
 
   // Cursor beyond line content - append cursor at end
   if (cursorX >= totalLen) {
-    return [...chunks, makeCursorChunk(" ", cursorStyle)]
+    return [...chunks, makeCursorChunk(" ", cursorStyle, undefined, defaultFg)]
   }
 
   // Find and split the chunk containing the cursor
@@ -209,7 +222,7 @@ function applyCursorToLine(
       }
 
       // Cursor character
-      result.push(makeCursorChunk(chunk.text[pos], cursorStyle, chunk))
+      result.push(makeCursorChunk(chunk.text[pos], cursorStyle, chunk, defaultFg))
 
       // Text after cursor
       if (pos + 1 < chunk.text.length) {
@@ -229,6 +242,7 @@ export function terminalDataToStyledText(
   data: TerminalData,
   highlights?: HighlightRegion[],
   cursor?: { x: number; y: number; style: "block" | "underline" },
+  defaultFg: RGBA = DEFAULT_FG,
 ): StyledText {
   const chunks: TextChunk[] = []
 
@@ -250,7 +264,7 @@ export function terminalDataToStyledText(
       lineChunks.push({ __isChunk: true, text: " ", attributes: 0 })
     } else {
       for (const span of line.spans) {
-        lineChunks.push(convertSpanToChunk(span))
+        lineChunks.push(convertSpanToChunk(span, defaultFg))
       }
     }
 
@@ -262,7 +276,7 @@ export function terminalDataToStyledText(
 
     // Apply cursor for this line
     if (cursor && i === cursor.y) {
-      lineChunks = applyCursorToLine(lineChunks, cursor.x, cursor.style)
+      lineChunks = applyCursorToLine(lineChunks, cursor.x, cursor.style, defaultFg)
     }
 
     chunks.push(...lineChunks)
@@ -296,6 +310,12 @@ export interface GhosttyTerminalOptions extends TextBufferOptions {
    * Cursor style: 'block' (inverts colors) or 'underline'. Defaults to 'block'.
    */
   cursorStyle?: "block" | "underline"
+  /**
+   * Default foreground color for text without explicit ANSI color codes.
+   * Can be a hex string (e.g., "#ffffff") or an RGBA object.
+   * Defaults to "#d4d4d4" (a muted gray).
+   */
+  defaultForegroundColor?: string | RGBA
 }
 
 /** @deprecated Use GhosttyTerminalOptions instead */
@@ -312,18 +332,24 @@ export class GhosttyTerminalRenderable extends TextBufferRenderable {
   private _lineCount: number = 0
   private _showCursor: boolean = false
   private _cursorStyle: "block" | "underline" = "block"
+  private _defaultForeground: RGBA
   
   // Persistent terminal support
   private _persistent: boolean = false
   private _persistentTerminal: PersistentTerminal | null = null
 
   constructor(ctx: RenderContext, options: GhosttyTerminalOptions) {
+    const defaultForeground = options.defaultForegroundColor 
+      ? parseColor(options.defaultForegroundColor) 
+      : DEFAULT_FG
+    
     super(ctx, {
       ...options,
-      fg: DEFAULT_FG,
+      fg: defaultForeground,
       wrapMode: "none",
     })
 
+    this._defaultForeground = defaultForeground
     this._ansi = options.ansi ?? ""
     this._cols = options.cols ?? 120
     this._rows = options.rows ?? 40
@@ -410,6 +436,19 @@ export class GhosttyTerminalRenderable extends TextBufferRenderable {
   set cursorStyle(value: "block" | "underline") {
     if (this._cursorStyle !== value) {
       this._cursorStyle = value
+      this._ansiDirty = true
+      this.requestRender()
+    }
+  }
+
+  get defaultForegroundColor(): RGBA {
+    return this._defaultForeground
+  }
+
+  set defaultForegroundColor(value: string | RGBA) {
+    const newFg = parseColor(value)
+    if (this._defaultForeground !== newFg) {
+      this._defaultForeground = newFg
       this._ansiDirty = true
       this.requestRender()
     }
@@ -572,7 +611,7 @@ export class GhosttyTerminalRenderable extends TextBufferRenderable {
         style: this._cursorStyle,
       } : undefined
       
-      const styledText = terminalDataToStyledText(data, this._highlights, cursor)
+      const styledText = terminalDataToStyledText(data, this._highlights, cursor, this._defaultForeground)
       this.textBuffer.setStyledText(styledText)
       this.updateTextInfo()
       
