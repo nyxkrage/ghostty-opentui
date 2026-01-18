@@ -7,6 +7,7 @@
     "dev": "bun --watch run tui/example.tsx",
     "build": "tsc && cp src/native-lib.cjs src/native-lib.d.cts dist/",
     "build:zig": "zig build",
+    "prepare": "bun run build && bun run build:zig",
     "prepublishOnly": "[ -n \"$CI\" ] || (echo 'Error: Do not publish locally. Push to main and let CI handle it.' && exit 1)",
     "test": "bun test",
     "bench": "vitest bench --run"
@@ -35,7 +36,15 @@
     "dist",
     "src"
   ],
-  "keywords": ["terminal", "pty", "vt100", "ansi", "ghostty", "opentui", "napi"],
+  "keywords": [
+    "terminal",
+    "pty",
+    "vt100",
+    "ansi",
+    "ghostty",
+    "opentui",
+    "napi"
+  ],
   "author": "remorses",
   "license": "MIT",
   "repository": {
